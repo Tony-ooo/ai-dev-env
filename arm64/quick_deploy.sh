@@ -27,7 +27,7 @@ IMAGE_NAME="tonyooo/ai-dev-env:3.0-arm64"
 ENABLE_HTTPS="false"
 
 # 执行部署脚本，GPU 自动检测
-bash --login -c "src/custom_deploy.sh \
+bash --login -c "../src/custom_deploy.sh \
 --user-name $USER_NAME \
 --port-base $PORT_BASE \
 --user_password $USER_PASSWORD \
