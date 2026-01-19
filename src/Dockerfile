@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # 系统依赖、SSH 设置与 dev 用户配置
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
-        curl sudo wget git vim nano net-tools gnupg ca-certificates file tree \
+        curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata \
         software-properties-common \
         build-essential; \
@@ -68,6 +68,7 @@ RUN set -eux; \
         npm install -g @anthropic-ai/claude-code@latest && \
         npm install -g @openai/codex@latest && \
         npm install -g @google/gemini-cli@latest && \
+        npm install -g pm2@latest && \
         npm cache clean --force'"; \
     printf '%s\n' \
         'export NVM_DIR="/home/dev/.nvm"' \
