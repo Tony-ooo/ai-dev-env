@@ -6,7 +6,7 @@ echo "Image: tonyooo/ai-dev-env:3.0-amd64"
 echo "============================================"
 
 # 构建 Docker 镜像
-docker build -t tonyooo/ai-dev-env:3.0-amd64 ../src/Dockerfile
+docker build -t tonyooo/ai-dev-env:3.0-amd64 ../src
 BUILD_STATUS=$?
 
 echo

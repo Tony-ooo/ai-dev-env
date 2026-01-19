@@ -78,9 +78,7 @@ done
 # 在宿主机上为用户创建持久化目录结构：
 #   $BASE_DATA_DIR/$USER_NAME/
 #   ├── workspace/          # 工作区（代码项目）
-#   ├── .claude/            # Claude AI 配置
-#   ├── .codex/             # Codex AI 配置
-#   ├── .claude.json        # Claude AI 配置
+#   ├── ai-configs/         # AI 配置
 #   ├── .code-server/       # Code Server 数据（开源服务器Web版）
 #   ├── .vscode-server/     # VSCode Server 数据（官方服务器）
 #   └── .bashrc.extra       # 用户自定义 shell 配置
@@ -98,26 +96,29 @@ fi
 
 # 2. 构建目录路径
 DATA_DIR="$BASE_DATA_DIR/$USER_NAME"
-CLAUDE_DIR="$DATA_DIR/.claude"
-CODEX_DIR="$DATA_DIR/.codex"
+BASHRC_EXTRA_DIR="$DATA_DIR/.bashrc.extra"
+CLAUDE_DIR="$DATA_DIR/ai-configs/.claude"
+CLAUDE_JSON_DIR="$DATA_DIR/ai-configs/.claude.json"
+CODEX_DIR="$DATA_DIR/ai-configs/.codex"
+GEMINI_DIR="$DATA_DIR/ai-configs/.gemini"
 VSCODE_SERVER_DIR="$DATA_DIR/.vscode-server"
 CODE_SERVER_DIR="$DATA_DIR/.code-server"
-README_FILE="$DATA_DIR/workspace/README.md"
+WORKSPACE_DIR="$DATA_DIR/workspace"
 
 # 3. 创建所有必要目录
-mkdir -p "$DATA_DIR/workspace" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR" "$CODE_SERVER_DIR"
+mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERVER_DIR" "$CODE_SERVER_DIR"
 
 # 3. 创建配置文件（仅当不存在时）
 # 注意：先删除可能被 Docker 自动创建的同名目录
-[[ ! -f "$DATA_DIR/.bashrc.extra" ]] && { [[ -d "$DATA_DIR/.bashrc.extra" ]] && rm -rf "$DATA_DIR/.bashrc.extra"; touch "$DATA_DIR/.bashrc.extra"; }
-[[ ! -f "$DATA_DIR/.claude.json" ]] && { [[ -d "$DATA_DIR/.claude.json" ]] && rm -rf "$DATA_DIR/.claude.json"; echo '{"hasCompletedOnboarding": true}' > "$DATA_DIR/.claude.json"; }
+[[ ! -f "$BASHRC_EXTRA_DIR" ]] && { [[ -d "$BASHRC_EXTRA_DIR" ]] && rm -rf "$BASHRC_EXTRA_DIR"; touch "$BASHRC_EXTRA_DIR"; }
+[[ ! -f "$CLAUDE_JSON_DIR" ]] && { [[ -d "$CLAUDE_JSON_DIR" ]] && rm -rf "$CLAUDE_JSON_DIR"; echo '{"hasCompletedOnboarding": true}' > "$CLAUDE_JSON_DIR"; }
 
 # 注意：文件权限由容器 entrypoint.sh 统一处理
 # - mkdir 创建的目录自动归属当前用户，通常无需手动修正
 # - 容器启动时，entrypoint.sh 会根据 HOST_UID/GID 自动调整所有挂载目录的权限
 
 # 3. 初始化工作区欢迎文档
-cat <<'EOF' > "$README_FILE"
+cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 # 欢迎使用团队 AI 云端工作站
 
 您正在使用基于 Docker 构建的 **AI 编码 3.0** 环境。
@@ -179,11 +180,12 @@ fi
 # 3. 挂载目录和环境变量
 DOCKER_CMD+=(
     # 持久化目录挂载
-    -v "$DATA_DIR/workspace:/home/dev/workspace"
-    -v "$DATA_DIR/.bashrc.extra:/home/dev/.bashrc.extra"
-    -v "$DATA_DIR/.claude.json:/home/dev/.claude.json"
+    -v "$WORKSPACE_DIR:/home/dev/workspace"
+    -v "$BASHRC_EXTRA_DIR:/home/dev/.bashrc.extra"
     -v "$CLAUDE_DIR:/home/dev/.claude"
+    -v "$CLAUDE_JSON_DIR:/home/dev/.claude.json"
     -v "$CODEX_DIR:/home/dev/.codex"
+    -v "$GEMINI_DIR:/home/dev/.gemini"
     -v "$VSCODE_SERVER_DIR:/home/dev/.vscode-server"
     -v "$CODE_SERVER_DIR:/home/dev/.local/share/code-server"
 

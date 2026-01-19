@@ -65,7 +65,7 @@ RUN set -eux; \
         nvm install 22 && \
         nvm alias default 22 && \
         nvm use default && \
-        npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest && \
+        npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest && \
         npm cache clean --force'"; \
     printf '%s\n' \
         'export NVM_DIR="/home/dev/.nvm"' \
