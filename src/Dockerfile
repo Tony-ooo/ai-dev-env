@@ -60,12 +60,12 @@ RUN set -eux; \
 # NVM & Node
 RUN set -eux; \
     su - dev -c "bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'"; \
+    su - dev -c "bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'"; \
     su - dev -c "bash -lc 'export NVM_DIR=/home/dev/.nvm && \
         [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && \
         nvm install 22 && \
         nvm alias default 22 && \
         nvm use default && \
-        npm install -g @anthropic-ai/claude-code@latest && \
         npm install -g @openai/codex@latest && \
         npm install -g @google/gemini-cli@latest && \
         npm install -g pm2@latest && \
