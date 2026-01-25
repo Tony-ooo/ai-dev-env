@@ -60,7 +60,7 @@ RUN set -eux; \
 
 # NVM & Node
 RUN set -eux; \
-    su - dev -c "bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash'"; \
+    su - dev -c "bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'"; \
     su - dev -c "bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'"; \
     su - dev -c "bash -lc 'export NVM_DIR=/home/dev/.nvm && \
         [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && \
