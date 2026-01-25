@@ -6,7 +6,10 @@ echo "Image: tonyooo/ai-dev-env:3.0-amd64"
 echo "============================================"
 
 # 构建 Docker 镜像
-docker build -t tonyooo/ai-dev-env:3.0-amd64 ../src
+docker build \
+  --build-arg HTTP_PROXY=http://host.docker.internal:7890 \
+  --build-arg HTTPS_PROXY=http://host.docker.internal:7890 \
+  -t tonyooo/ai-dev-env:3.0-amd64 ../src
 BUILD_STATUS=$?
 
 echo
