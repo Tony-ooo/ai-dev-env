@@ -58,10 +58,14 @@ RUN set -eux; \
         >> /home/dev/.bashrc; \
     su - dev -c "rm -rf $HOME/.cache/*"
 
+# Install Claude Code
+COPY --chmod=755 claude_install.sh /tmp/claude_install.sh
+RUN su - dev -c "bash -lc '/tmp/claude_install.sh'"; \
+    rm -f /tmp/claude_install.sh || true
+
 # NVM & Node
 RUN set -eux; \
     su - dev -c "bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'"; \
-    su - dev -c "bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'"; \
     su - dev -c "bash -lc 'export NVM_DIR=/home/dev/.nvm && \
         [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && \
         nvm install 22 && \
