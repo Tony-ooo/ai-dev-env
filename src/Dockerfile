@@ -20,10 +20,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential \
-    # 配置语言和时区
+    # 系统级时区与语言配置
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
     # 配置 SSH
     && mkdir -p /run/sshd \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
@@ -32,18 +33,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd -m -s /bin/bash -u "$HOST_UID" -g "$HOST_GID" dev \
     && usermod -aG sudo dev \
     && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    # 清理缓存减少体积
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && echo "set -g mouse on" > /home/dev/.tmux.conf \
+    && chown dev:dev /home/dev/.tmux.conf \
+    # 清理缓存
+    && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/* /var/tmp/*
 
 # --- 用户权限操作层 ---
 USER dev
 WORKDIR /home/dev
-
-# 配置 dev 用户的 shell 环境
-RUN echo "export LANG=zh_CN.UTF-8" >> .bashrc \
-    && echo "export LC_ALL=zh_CN.UTF-8" >> .bashrc \
-    && echo "export TZ=Asia/Shanghai" >> .bashrc \
-    && echo "set -g mouse on" >> .tmux.conf
 
 # 1. 安装 uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
@@ -74,7 +71,7 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | b
     && echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> .bashrc \
     && echo '[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"' >> .bashrc
 
-# 4. Install Claude Code & code-server
+# 4. 安装 Claude Code & code-server
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && curl -fsSL https://code-server.dev/install.sh | PREFIX=~/.local sh -s -- --method=standalone \
     && rm -rf .cache/*
