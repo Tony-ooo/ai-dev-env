@@ -34,8 +34,8 @@ RUN set -eux; \
 
 # uv
 RUN set -eux; \
-    su - dev -c "bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'"; \
-    su - dev -c "rm -rf $HOME/.cache/*"
+    runuser -u dev -- bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'; \
+    runuser -u dev -- rm -rf /home/dev/.cache/*
 
 # Miniconda
 RUN set -eux; \
@@ -48,45 +48,45 @@ RUN set -eux; \
         echo "Unsupported architecture: $ARCH" && exit 1; \
     fi; \
     curl -sSLo /tmp/miniconda.sh "$MINICONDA_URL"; \
-    su - dev -c "bash /tmp/miniconda.sh -b -p $HOME/miniconda3"; \
+    runuser -u dev -- bash /tmp/miniconda.sh -b -p /home/dev/miniconda3; \
     rm /tmp/miniconda.sh; \
-    su - dev -c "$HOME/miniconda3/bin/conda clean -afy"; \
-    su - dev -c "$HOME/miniconda3/bin/conda init bash"; \
+    runuser -u dev -- /home/dev/miniconda3/bin/conda clean -afy; \
+    runuser -u dev -- /home/dev/miniconda3/bin/conda init bash; \
     printf '%s\n' \
         'export PATH="/home/dev/miniconda3/bin:/home/dev/.local/bin:$PATH"' \
         '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' \
         >> /home/dev/.bashrc; \
-    su - dev -c "rm -rf $HOME/.cache/*"
+    runuser -u dev -- rm -rf /home/dev/.cache/*
 
 # Install Claude Code
 COPY --chmod=755 claude_install.sh /tmp/claude_install.sh
-RUN su - dev -c "bash -lc '/tmp/claude_install.sh'"; \
+RUN runuser -u dev -- bash -lc '/tmp/claude_install.sh'; \
     rm -f /tmp/claude_install.sh || true
 
 # NVM & Node
 RUN set -eux; \
-    su - dev -c "bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'"; \
-    su - dev -c "bash -lc 'export NVM_DIR=/home/dev/.nvm && \
-        [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && \
+    runuser -u dev -- bash -lc 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'; \
+    runuser -u dev -- bash -lc 'export NVM_DIR=/home/dev/.nvm && \
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
         nvm install 22 && \
         nvm alias default 22 && \
         nvm use default && \
         npm install -g @openai/codex@latest && \
         npm install -g @google/gemini-cli@latest && \
         npm install -g pm2@latest && \
-        npm cache clean --force'"; \
+        npm cache clean --force'; \
     printf '%s\n' \
         'export NVM_DIR="/home/dev/.nvm"' \
         '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' \
         '[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"' \
         'if command -v nvm >/dev/null 2>&1; then nvm use default >/dev/null 2>&1; fi' \
         >> /home/dev/.bashrc; \
-    su - dev -c "rm -rf $HOME/.cache/*"
+    runuser -u dev -- rm -rf /home/dev/.cache/*
 
 # code-server
 RUN set -eux; \
-    su - dev -c "bash -lc 'curl -fsSL https://code-server.dev/install.sh | PREFIX=$HOME/.local sh -s -- --method=standalone'"; \
-    su - dev -c "rm -rf $HOME/.cache/*"
+    runuser -u dev -- bash -lc 'curl -fsSL https://code-server.dev/install.sh | PREFIX=/home/dev/.local sh -s -- --method=standalone'; \
+    runuser -u dev -- rm -rf /home/dev/.cache/*
 
 # 入口脚本
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
