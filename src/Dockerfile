@@ -16,7 +16,7 @@ RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata \
-        software-properties-common \
+        software-properties-common tmux\
         build-essential; \
     locale-gen zh_CN.UTF-8; \
     update-locale LANG=zh_CN.UTF-8; \
@@ -29,6 +29,7 @@ RUN set -eux; \
     echo 'export LANG=zh_CN.UTF-8' >> /home/dev/.bashrc; \
     echo 'export LC_ALL=zh_CN.UTF-8' >> /home/dev/.bashrc; \
     echo 'export TZ=Asia/Shanghai' >> /home/dev/.bashrc; \
+    echo 'set -g mouse on' >> /home/dev/.tmux.conf; \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # uv
