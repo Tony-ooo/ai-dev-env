@@ -22,6 +22,18 @@ AI 云站开发环境 Docker 镜像构建配置。
 
 ## 快速开始
 
+### 代理设置（可选）
+
+```bash
+# AMD64 架构
+cd amd64 && cp build.sh.example build.sh
+# 修改 build.sh 中的代理地址
+
+# ARM64 架构
+cd arm64 && cp build.sh.example build.sh
+# 修改 build.sh 中的代理地址
+```
+
 ### 构建镜像
 
 ```bash
