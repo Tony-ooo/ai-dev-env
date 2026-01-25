@@ -6,8 +6,8 @@ ARG MINICONDA_VERSION=py310_23.5.2-0
 ARG NODE_VERSION=22
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=zh_CN.UTF-8 \
-    LC_ALL=zh_CN.UTF-8 \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
     NVM_DIR=/home/dev/.nvm \
@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential \
     # 系统级时区与语言配置
-    && locale-gen zh_CN.UTF-8 \
-    && update-locale LANG=zh_CN.UTF-8 \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8 \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone \
     # 配置 SSH
