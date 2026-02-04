@@ -10,8 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=en_US.UTF-8 \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
-    NVM_DIR=/home/dev/.nvm \
-    PATH=/home/dev/miniconda3/bin:/home/dev/.local/bin:/home/dev/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH
+    PATH=/home/dev/miniconda3/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
 
 # 更改 shell 默认行为：遇到错误立即退出，处理管道错误
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -35,9 +34,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && echo "set -g mouse on" > /home/dev/.tmux.conf \
     && chown dev:dev /home/dev/.tmux.conf \
-    # 清理缓存
-    && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -rf /tmp/* /var/tmp/*
-
+    # 安装 Node.js 22.x
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    # 严格清理
+    && apt-get autoremove -y && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/*
+    
 # --- 用户权限操作层 ---
 USER dev
 WORKDIR /home/dev
@@ -59,21 +63,16 @@ RUN ARCH=$(uname -m) \
     && ~/miniconda3/bin/conda clean -afy \
     && ~/miniconda3/bin/conda init bash
 
-# 3. 安装 NVM & Node
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash \
-    && . "$NVM_DIR/nvm.sh" \
-    && nvm install ${NODE_VERSION} \
-    && nvm alias default ${NODE_VERSION} \
-    && nvm use default \
-    && npm install -g @openai/codex@latest @google/gemini-cli@latest pm2@latest \
-    && npm cache clean --force \
-    && echo 'export NVM_DIR="/home/dev/.nvm"' >> .bashrc \
-    && echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> .bashrc \
-    && echo '[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"' >> .bashrc
-
-# 4. 安装 Claude Code & code-server
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && curl -fsSL https://code-server.dev/install.sh | PREFIX=~/.local sh -s -- --method=standalone \
+# 3. 安装 npm 全局工具
+RUN mkdir -p ~/.npm-global \
+    && npm config set prefix '~/.npm-global' \
+    && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
+    && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
+    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@latest \
+    && npm cache clean --force
+    
+# 4. 安装 code-server
+RUN curl -fsSL https://code-server.dev/install.sh | PREFIX=~/.local sh -s -- --method=standalone \
     && rm -rf .cache/*
 
 # --- 切回 root 配置入口脚本权限 ---
@@ -83,7 +82,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # 暴露端口
-EXPOSE 22 8080
+EXPOSE 22 8080 18789
 
 # 切换回 dev 用户作为默认运行用户
 USER dev

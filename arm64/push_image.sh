@@ -2,11 +2,11 @@
 
 echo "============================================"
 echo "Starting Docker image push process..."
-echo "Image: tonyooo/ai-dev-env:3.0-arm64"
+echo "Image: tonyooo/ai-dev-env:4.0-arm64"
 echo "============================================"
 
 # 推送 Docker 镜像
-docker push tonyooo/ai-dev-env:3.0-arm64
+docker push tonyooo/ai-dev-env:4.0-arm64
 PUSH_STATUS=$?
 
 echo

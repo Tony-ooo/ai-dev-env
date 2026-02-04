@@ -15,6 +15,7 @@ set -eo pipefail
 # 容器内固定端口（通过宿主机端口映射对外暴露）
 SSH_PORT=22              # SSH 服务端口
 VSCODE_PORT=8080         # code-server 服务端口
+OPENCLAW_PORT=18789      # OpenClaw 服务端口
 
 # 系统环境检测
 HOST_UID=$(id -u)        # 宿主机当前用户 UID（用于文件权限映射）
@@ -101,12 +102,13 @@ CLAUDE_DIR="$DATA_DIR/ai-configs/.claude"
 CLAUDE_JSON_DIR="$DATA_DIR/ai-configs/.claude.json"
 CODEX_DIR="$DATA_DIR/ai-configs/.codex"
 GEMINI_DIR="$DATA_DIR/ai-configs/.gemini"
+OPENCLAW_DIR="$DATA_DIR/ai-configs/.openclaw"
 VSCODE_SERVER_DIR="$DATA_DIR/.vscode-server"
 CODE_SERVER_DIR="$DATA_DIR/.code-server"
 WORKSPACE_DIR="$DATA_DIR/workspace"
 
 # 3. 创建所有必要目录
-mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERVER_DIR" "$CODE_SERVER_DIR"
+mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERVER_DIR" "$CODE_SERVER_DIR" "$OPENCLAW_DIR"
 
 # 3. 创建配置文件（仅当不存在时）
 # 注意：先删除可能被 Docker 自动创建的同名目录
@@ -121,7 +123,7 @@ mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERV
 cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 # 欢迎使用团队 AI 云端工作站
 
-您正在使用基于 Docker 构建的 **AI 编码 3.0** 环境。
+您正在使用基于 Docker 构建的 **AI 编码 4.0** 环境。
 
 ## 快速提示
 
@@ -135,7 +137,8 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 | **Python** | 3.10 | 由 Miniconda 提供 |
 | code-server | 最新 | VS Code Web 版 |
 | **uv** | 最新 | Rust 实现的极速 Python 包管理器 |
-| Git / Vim / curl / build-essential | - | 常用开发工具 |
+| Git / Vim / curl / build-essential | 最新 | 常用开发工具 |
+| **Claude Code / Codex / Gemini / OpenClaw** | 最新 | 常用 AI 工具 |
 
 > 注：版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version` 等命令查看。
 
@@ -187,6 +190,7 @@ DOCKER_CMD+=(
     -v "$CODEX_DIR:/home/dev/.codex"
     -v "$GEMINI_DIR:/home/dev/.gemini"
     -v "$VSCODE_SERVER_DIR:/home/dev/.vscode-server"
+    -v "$OPENCLAW_DIR:/home/dev/.openclaw"
     -v "$CODE_SERVER_DIR:/home/dev/.local/share/code-server"
 
     # 环境变量（用于 entrypoint.sh 权限处理）
@@ -198,6 +202,7 @@ DOCKER_CMD+=(
     # 端口映射（宿主机:容器）
     -p "${PORT_BASE}22:$SSH_PORT"      # SSH 端口
     -p "${PORT_BASE}80:$VSCODE_PORT"   # code-server 端口
+    -p "${PORT_BASE}789:$OPENCLAW_PORT"   # openclaw 端口
 )
 
 # 4. GPU 支持自动检测
@@ -241,8 +246,9 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
 
     # 访问方式
     echo "🌐 访问方式："
-    echo "   ├─ Web VS Code: http://YOUR_SERVER_IP:${PORT_BASE}80"
-    echo "   └─ SSH 终端:    ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
+    echo "   ├─ Web VS Code:   http://YOUR_SERVER_IP:${PORT_BASE}80"
+    echo "   └─ SSH 终端:      ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
+    echo "   └─ OpenClaw 端口: http://YOUR_SERVER_IP:${PORT_BASE}789"
     echo ""
 
     # 资源配置

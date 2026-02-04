@@ -2,14 +2,14 @@
 
 echo "============================================"
 echo "Starting Docker image build process..."
-echo "Image: tonyooo/ai-dev-env:3.0-arm64"
+echo "Image: tonyooo/ai-dev-env:4.0-arm64"
 echo "============================================"
 
 # 构建 Docker 镜像
 docker build \
   --build-arg HTTP_PROXY=http://host.docker.internal:7890 \
   --build-arg HTTPS_PROXY=http://host.docker.internal:7890 \
-  -t tonyooo/ai-dev-env:3.0-arm64 ../src
+  -t tonyooo/ai-dev-env:4.0-arm64 ../src
 BUILD_STATUS=$?
 
 echo
