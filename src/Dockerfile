@@ -68,6 +68,7 @@ RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
+    && echo 'alias gwstart="/usr/local/bin/gateway-start.sh"' >> ~/.bashrc \
     && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@v2026.2.23 \
     && npm cache clean --force
     

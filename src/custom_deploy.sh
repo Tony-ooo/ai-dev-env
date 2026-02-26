@@ -140,7 +140,9 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 | Git / Vim / curl / build-essential | 最新 | 常用开发工具 |
 | **Claude Code / Codex / Gemini / OpenClaw** | 最新 | 常用 AI 工具 |
 
-> 注：版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version` 等命令查看。
+> 注：
+1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version` 等命令查看。
+2. 容器内 OpenClaw 网关启动/重启命令已替换为由 PM2 后台进程管理，默认跟随容器启动/重启，手动执行命令为：`gwstart`
 
 ## 目录结构
 - `/home/dev`：您的用户主目录。
