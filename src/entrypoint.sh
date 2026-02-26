@@ -94,6 +94,18 @@ fi
 echo "🔧 修正 /home/dev 目录所有权..."
 chown -R dev:dev /home/dev || true
 
+GATEWAY_START_SCRIPT="/usr/local/bin/gateway-start.sh"
+if [ -x "$GATEWAY_START_SCRIPT" ]; then
+    echo "🚀 执行 OpenClaw Gateway 启动脚本..."
+    if sudo -E -u dev "$GATEWAY_START_SCRIPT"; then
+        echo "✅ OpenClaw Gateway 启动脚本执行完成"
+    else
+        echo "⚠️ OpenClaw Gateway 启动脚本执行失败，继续启动 code-server"
+    fi
+else
+    echo "⚠️ 未找到 gateway-start.sh，跳过 OpenClaw Gateway 启动"
+fi
+
 echo "🚀 启动 code-server（端口: $VSCODE_PORT）..."
 
 # 构建证书参数

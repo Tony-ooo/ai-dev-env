@@ -68,7 +68,7 @@ RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
-    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@latest \
+    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@v2026.2.23 \
     && npm cache clean --force
     
 # 4. 安装 code-server
@@ -79,7 +79,8 @@ RUN curl -fsSL https://code-server.dev/install.sh | PREFIX=~/.local sh -s -- --m
 USER root
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY gateway-start.sh /usr/local/bin/gateway-start.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/gateway-start.sh
 
 # 暴露端口
 EXPOSE 22 8080 18789
