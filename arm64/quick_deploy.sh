@@ -13,7 +13,7 @@
 
 echo "=================================================="
 echo "Starting Docker image deployment process..."
-echo "Image: tonyooo/ai-dev-env:4.0-arm64"
+echo "Image: tonyooo/ai-dev-env:4.1-arm64"
 echo "GPU: auto-detect"
 echo "=================================================="
 
@@ -23,7 +23,7 @@ USER_PASSWORD=$(openssl rand -base64 32 | tr -d '=+/.' | cut -c1-32)
 
 # 自定义参数
 BASE_DATA_DIR="/Users/wangtao/Documents/DockerSpace/ai-cloud-station/user-data"
-IMAGE_NAME="tonyooo/ai-dev-env:4.0-arm64"
+IMAGE_NAME="tonyooo/ai-dev-env:4.1-arm64"
 ENABLE_HTTPS="false"
 
 # 执行部署脚本，GPU 自动检测

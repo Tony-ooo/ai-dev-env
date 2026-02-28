@@ -143,6 +143,7 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 > 注：
 1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version` 等命令查看。
 2. 容器内 OpenClaw 网关启动/重启命令已替换为由 PM2 后台进程管理，默认跟随容器启动/重启，手动执行命令为：`gwstart`
+3. 容器启动后需通过 `openclaw onboard` 或 `openclaw config` 命令进行首次配置，配置完成后，后续启动可直接使用，无需重新配置。
 
 ## 目录结构
 - `/home/dev`：您的用户主目录。

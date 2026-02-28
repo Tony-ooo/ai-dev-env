@@ -90,9 +90,116 @@ if [ -z "$CODE_SERVER_BIN" ]; then
     exit 1
 fi
 
-# 确保 dev 用户目录权限正确
-echo "🔧 修正 /home/dev 目录所有权..."
-chown -R dev:dev /home/dev || true
+# 自动探测 /home/dev 下需要修复权限的路径（不再硬编码关键目录）
+echo "🔧 自动探测并修正 /home/dev 下 root 所有权路径..."
+
+(
+    chown dev:dev /home/dev 2>/dev/null || true
+    CHOWN_TARGETS=()
+
+    # 1) 自动收集挂载到 /home/dev 下的卷/绑定路径
+    if [ -r /proc/self/mountinfo ]; then
+        while IFS= read -r mount_target; do
+            [ -n "$mount_target" ] && CHOWN_TARGETS+=("$mount_target")
+        done < <(awk '$5 ~ /^\/home\/dev(\/|$)/ {print $5}' /proc/self/mountinfo 2>/dev/null | sort -u)
+    fi
+
+    # 2) 自动扫描 root 所有权路径（默认 3 层，避免全量深度扫描）
+    CHOWN_SCAN_DEPTH=${CHOWN_SCAN_DEPTH:-3}
+    case "$CHOWN_SCAN_DEPTH" in
+        ''|*[!0-9]*) CHOWN_SCAN_DEPTH=3 ;;
+    esac
+    if [ "$CHOWN_SCAN_DEPTH" -le 0 ]; then
+        CHOWN_SCAN_DEPTH=3
+    fi
+
+    while IFS= read -r detected_target; do
+        CHOWN_TARGETS+=("$detected_target")
+    done < <(find /home/dev -mindepth 1 -maxdepth "$CHOWN_SCAN_DEPTH" \( -uid 0 -o -gid 0 \) -print 2>/dev/null || true)
+
+    declare -A CHOWN_SEEN=()
+    for target in "${CHOWN_TARGETS[@]}"; do
+        if [ -n "${CHOWN_SEEN[$target]+x}" ]; then
+            continue
+        fi
+        CHOWN_SEEN["$target"]=1
+
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            if [ -d "$target" ] && [ ! -L "$target" ]; then
+                # 优先只修 root:root，兼容旧版本 chown 再兜底全量修复
+                chown --from=0:0 -R dev:dev "$target" 2>/dev/null || chown -R dev:dev "$target" 2>/dev/null || true
+            else
+                chown dev:dev "$target" 2>/dev/null || true
+            fi
+        fi
+    done
+) &
+CHOWN_PID=$!
+CHOWN_START=$SECONDS
+CHOWN_ESTIMATE_SEC=${CHOWN_ESTIMATE_SEC:-100}
+CHOWN_WIDTH=24
+CHOWN_LAST_SHOWN=-1
+
+case "$CHOWN_ESTIMATE_SEC" in
+    ''|*[!0-9]*) CHOWN_ESTIMATE_SEC=100 ;;
+esac
+if [ "$CHOWN_ESTIMATE_SEC" -le 0 ]; then
+    CHOWN_ESTIMATE_SEC=100
+fi
+
+if [ -t 1 ]; then
+    while kill -0 "$CHOWN_PID" 2>/dev/null; do
+        CHOWN_COST=$((SECONDS - CHOWN_START))
+        CHOWN_PERCENT=$((CHOWN_COST * 100 / CHOWN_ESTIMATE_SEC))
+        if [ "$CHOWN_PERCENT" -gt 99 ]; then
+            CHOWN_PERCENT=99
+        fi
+        CHOWN_FILLED=$((CHOWN_PERCENT * CHOWN_WIDTH / 100))
+        CHOWN_EMPTY=$((CHOWN_WIDTH - CHOWN_FILLED))
+        CHOWN_BAR_FILL=$(printf '%*s' "$CHOWN_FILLED" '' | tr ' ' '#')
+        CHOWN_BAR_EMPTY=$(printf '%*s' "$CHOWN_EMPTY" '' | tr ' ' '-')
+        if [ "$CHOWN_COST" -ne "$CHOWN_LAST_SHOWN" ]; then
+            printf "\r   总进度(估算)：[%s%s] %3d%% 进行中 %ss" \
+                "$CHOWN_BAR_FILL" "$CHOWN_BAR_EMPTY" "$CHOWN_PERCENT" "$CHOWN_COST"
+            CHOWN_LAST_SHOWN=$CHOWN_COST
+        fi
+        sleep 0.2
+    done
+else
+    while kill -0 "$CHOWN_PID" 2>/dev/null; do
+        CHOWN_COST=$((SECONDS - CHOWN_START))
+        CHOWN_PERCENT=$((CHOWN_COST * 100 / CHOWN_ESTIMATE_SEC))
+        if [ "$CHOWN_PERCENT" -gt 99 ]; then
+            CHOWN_PERCENT=99
+        fi
+        CHOWN_FILLED=$((CHOWN_PERCENT * CHOWN_WIDTH / 100))
+        CHOWN_EMPTY=$((CHOWN_WIDTH - CHOWN_FILLED))
+        CHOWN_BAR_FILL=$(printf '%*s' "$CHOWN_FILLED" '' | tr ' ' '#')
+        CHOWN_BAR_EMPTY=$(printf '%*s' "$CHOWN_EMPTY" '' | tr ' ' '-')
+        if [ $((CHOWN_COST % 5)) -eq 0 ] && [ "$CHOWN_COST" -ne "$CHOWN_LAST_SHOWN" ]; then
+            echo "   总进度(估算)：[${CHOWN_BAR_FILL}${CHOWN_BAR_EMPTY}] ${CHOWN_PERCENT}% 进行中 ${CHOWN_COST}s"
+            CHOWN_LAST_SHOWN=$CHOWN_COST
+        fi
+        sleep 1
+    done
+fi
+
+CHOWN_EXIT=0
+wait "$CHOWN_PID" || CHOWN_EXIT=$?
+CHOWN_COST=$((SECONDS - CHOWN_START))
+CHOWN_BAR_DONE=$(printf '%*s' "$CHOWN_WIDTH" '' | tr ' ' '#')
+
+if [ -t 1 ]; then
+    printf "\r   总进度(估算)：[%s] 100%% 完成 %ss\n" "$CHOWN_BAR_DONE" "$CHOWN_COST"
+else
+    echo "   总进度(估算)：[${CHOWN_BAR_DONE}] 100% 完成 ${CHOWN_COST}s"
+fi
+
+if [ "$CHOWN_EXIT" -eq 0 ]; then
+    echo "✅ 关键目录所有权修正完成"
+else
+    echo "⚠️ 关键目录所有权修正部分失败（退出码: $CHOWN_EXIT），继续启动"
+fi
 
 GATEWAY_START_SCRIPT="/usr/local/bin/gateway-start.sh"
 if [ -x "$GATEWAY_START_SCRIPT" ]; then
