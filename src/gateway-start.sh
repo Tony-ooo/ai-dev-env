@@ -58,10 +58,9 @@ fi
 echo "[$(date)] Starting Gateway cleanup and restart..."
 echo "Using OpenClaw binary: $OPENCLAW_BIN"
 
-# 1. 停止 PM2 任务（避免重复启动）
-echo "Stopping existing PM2 task..."
+# 1. 仅停止 OpenClaw 对应 PM2 任务（避免影响其他 PM2 应用）
+echo "Stopping existing OpenClaw PM2 task..."
 pm2 delete "$APP_NAME" 2>/dev/null || true
-pm2 kill 2>/dev/null || true
 
 # 2. 强制清理所有相关进程
 echo "Killing all gateway processes..."
