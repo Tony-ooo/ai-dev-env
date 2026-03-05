@@ -4,6 +4,7 @@ ARG HOST_UID=1000
 ARG HOST_GID=1000
 ARG MINICONDA_VERSION=py310_23.5.2-0
 ARG NODE_VERSION=22
+ARG OPENCLAW_VERSION=latest
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_US.UTF-8 \
@@ -70,7 +71,7 @@ RUN mkdir -p ~/.npm-global \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
     && echo 'alias gwstart="/usr/local/bin/gateway-start.sh"' >> ~/.bashrc \
     && npm config set registry https://registry.npmmirror.com \
-    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@v2026.2.26 \
+    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@${OPENCLAW_VERSION} \
     && npm cache clean --force
     
 # 4. 安装 code-server
