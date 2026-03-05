@@ -63,26 +63,7 @@ RUN set -eux \
     && usermod -aG sudo dev \
     && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && echo "set -g mouse on" > /home/dev/.tmux.conf \
-    && chown dev:dev /home/dev/.tmux.conf
-
-# 避免 locale 尚未生成时出现告警
-ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
-
-RUN set -eux \
-    && retry() { \
-         local n=1 max=5 delay=5; \
-         until "$@"; do \
-           if [ "$n" -ge "$max" ]; then \
-             echo "Command failed after ${n} attempts: $*"; \
-             return 1; \
-           fi; \
-           echo "Command failed, retry ${n}/${max} in ${delay}s: $*"; \
-           sleep "$delay"; \
-           n=$((n + 1)); \
-           delay=$((delay * 2)); \
-         done; \
-       } \
+    && chown dev:dev /home/dev/.tmux.conf \
     # 安装 Node.js 22.x
     && retry curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" -o /tmp/nodesource_setup.sh \
     && retry bash /tmp/nodesource_setup.sh \
@@ -92,6 +73,10 @@ RUN set -eux \
     # 严格清理
     && apt-get autoremove -y && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/*
+
+# 避免 locale 尚未生成时出现告警
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
     
 # --- 用户权限操作层 ---
 USER dev
