@@ -7,8 +7,8 @@ ARG NODE_VERSION=22
 ARG OPENCLAW_VERSION=latest
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
     PATH=/home/dev/miniconda3/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
@@ -17,7 +17,33 @@ ENV DEBIAN_FRONTEND=noninteractive \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # --- Root 权限操作层 ---
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN set -eux \
+    # APT 抗网络抖动配置
+    && printf '%s\n' \
+        'Acquire::Retries "8";' \
+        'Acquire::http::Timeout "30";' \
+        'Acquire::https::Timeout "30";' \
+        'Acquire::http::Pipeline-Depth "0";' \
+        'Acquire::http::No-Cache "true";' \
+        'Acquire::https::No-Cache "true";' \
+        'Acquire::ForceIPv4 "true";' \
+       > /etc/apt/apt.conf.d/99network-resilience \
+    # 通用重试函数（指数退避，最大 5 次）
+    && retry() { \
+         local n=1 max=5 delay=5; \
+         until "$@"; do \
+           if [ "$n" -ge "$max" ]; then \
+             echo "Command failed after ${n} attempts: $*"; \
+             return 1; \
+           fi; \
+           echo "Command failed, retry ${n}/${max} in ${delay}s: $*"; \
+           sleep "$delay"; \
+           n=$((n + 1)); \
+           delay=$((delay * 2)); \
+         done; \
+       } \
+    && retry apt-get update \
+    && retry apt-get install -y --no-install-recommends --fix-missing \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep \
     # 系统级时区与语言配置
@@ -37,11 +63,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && usermod -aG sudo dev \
     && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && echo "set -g mouse on" > /home/dev/.tmux.conf \
-    && chown dev:dev /home/dev/.tmux.conf \
+    && chown dev:dev /home/dev/.tmux.conf
+
+# 避免 locale 尚未生成时出现告警
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+RUN set -eux \
+    && retry() { \
+         local n=1 max=5 delay=5; \
+         until "$@"; do \
+           if [ "$n" -ge "$max" ]; then \
+             echo "Command failed after ${n} attempts: $*"; \
+             return 1; \
+           fi; \
+           echo "Command failed, retry ${n}/${max} in ${delay}s: $*"; \
+           sleep "$delay"; \
+           n=$((n + 1)); \
+           delay=$((delay * 2)); \
+         done; \
+       } \
     # 安装 Node.js 22.x
-    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends nodejs \
+    && retry curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" -o /tmp/nodesource_setup.sh \
+    && retry bash /tmp/nodesource_setup.sh \
+    && retry apt-get update \
+    && retry apt-get install -y --no-install-recommends --fix-missing nodejs \
+    && rm -f /tmp/nodesource_setup.sh \
     # 严格清理
     && apt-get autoremove -y && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/*
@@ -51,7 +98,7 @@ USER dev
 WORKDIR /home/dev
 
 # 1. 安装 uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+RUN curl -LsSf "https://astral.sh/uv/install.sh" | sh \
     && rm -rf .cache/*
 
 # 2. 安装 Miniconda
@@ -73,12 +120,12 @@ RUN mkdir -p ~/.npm-global \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
     && echo 'alias gwstart="/usr/local/bin/gateway-start.sh"' >> ~/.bashrc \
-    && npm config set registry https://registry.npmmirror.com \
+    && npm config set registry "https://registry.npmmirror.com" \
     && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@${OPENCLAW_VERSION} \
     && npm cache clean --force
     
 # 4. 安装 code-server
-RUN curl -fsSL https://code-server.dev/install.sh | PREFIX=~/.local sh -s -- --method=standalone \
+RUN curl -fsSL "https://code-server.dev/install.sh" | PREFIX=~/.local sh -s -- --method=standalone \
     && rm -rf .cache/*
 
 # --- 切回 root 配置入口脚本权限 ---

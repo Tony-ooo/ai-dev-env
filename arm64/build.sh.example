@@ -5,15 +5,21 @@ echo "Starting Docker image build process..."
 echo "Image: tonyooo/ai-dev-env:4.1-arm64"
 echo "============================================"
 
-# 构建 Docker 镜像
+# 可选代理配置：
+PROXY_URL=${PROXY_URL:-http://proxy_ip:7890}
+
 # 可选固定版本号：
-# --build-arg OPENCLAW_VERSION=2026.3.2
-# --build-arg MINICONDA_VERSION=py310_23.5.2-0
-# --build-arg NODE_VERSION=22
+OPENCLAW_VERSION=${OPENCLAW_VERSION:-latest}
+MINICONDA_VERSION=${MINICONDA_VERSION:-py310_23.5.2-0}
+NODE_VERSION=${NODE_VERSION:-22}
+
+# 构建 Docker 镜像
 docker build \
-  --build-arg HTTP_PROXY=http://host.docker.internal:7890 \
-  --build-arg HTTPS_PROXY=http://host.docker.internal:7890 \
-  --build-arg OPENCLAW_VERSION=latest \
+  --build-arg HTTP_PROXY=${PROXY_URL} \
+  --build-arg HTTPS_PROXY=${PROXY_URL} \
+  --build-arg OPENCLAW_VERSION=${OPENCLAW_VERSION} \
+  --build-arg MINICONDA_VERSION=${MINICONDA_VERSION} \
+  --build-arg NODE_VERSION=${NODE_VERSION} \
   -t tonyooo/ai-dev-env:4.1-arm64 ../src
 BUILD_STATUS=$?
 
@@ -27,4 +33,3 @@ fi
 
 echo "============================================"
 read -n 1 -s -r -p "Task finished. Press any key to exit."
-
