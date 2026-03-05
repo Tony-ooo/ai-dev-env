@@ -19,7 +19,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # --- Root 权限操作层 ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
-        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential \
+        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep \
     # 系统级时区与语言配置
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
