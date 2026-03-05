@@ -43,7 +43,7 @@ RUN set -eux \
          done; \
        } \
     && retry apt-get update \
-    && retry apt-get install -y --no-install-recommends --fix-missing \
+    && retry apt-get install -y --no-install-recommends \
         curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
         openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep \
     # 系统级时区与语言配置
@@ -68,7 +68,7 @@ RUN set -eux \
     && retry curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" -o /tmp/nodesource_setup.sh \
     && retry bash /tmp/nodesource_setup.sh \
     && retry apt-get update \
-    && retry apt-get install -y --no-install-recommends --fix-missing nodejs \
+    && retry apt-get install -y --no-install-recommends nodejs \
     && rm -f /tmp/nodesource_setup.sh \
     # 严格清理
     && apt-get autoremove -y && apt-get clean \
