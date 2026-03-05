@@ -22,6 +22,32 @@ export HOME="${HOME_DIR}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${CONFIG_PATH}"
 
+BASHRC_PATH="${HOME}/.bashrc"
+touch "${BASHRC_PATH}"
+
+ensure_bashrc_block() {
+  local block_start="# >>> openclaw gateway runtime >>>"
+  local block_end="# <<< openclaw gateway runtime <<<"
+
+  if grep -Fq -- "${block_start}" "${BASHRC_PATH}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  {
+    echo ""
+    echo "${block_start}"
+    echo "export NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache"
+    echo "mkdir -p /var/tmp/openclaw-compile-cache"
+    echo "export OPENCLAW_NO_RESPAWN=1"
+    echo "${block_end}"
+  } >> "${BASHRC_PATH}"
+}
+
+ensure_bashrc_block
+
+# shellcheck disable=SC1090
+source "${BASHRC_PATH}"
+
 if [ -n "${PORT_OVERRIDE}" ]; then
   export OPENCLAW_GATEWAY_PORT="${PORT_OVERRIDE}"
 else
