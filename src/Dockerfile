@@ -22,12 +22,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential \
     # 系统级时区与语言配置
     && locale-gen en_US.UTF-8 \
-    && update-locale LANG=en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone \
     # 配置 SSH
     && mkdir -p /run/sshd \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    # 禁止 SSH 接收客户端 locale，避免本地 LANG/LC_* 污染容器
+    && sed -i '/^[[:space:]]*AcceptEnv[[:space:]]\+/d' /etc/ssh/sshd_config \
+    && printf '\nSetEnv LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8\n' >> /etc/ssh/sshd_config \
     # 创建用户和组 (处理 ID 冲突逻辑)
     && (groupadd -g "$HOST_GID" dev || groupmod -g "$HOST_GID" dev) \
     && useradd -m -s /bin/bash -u "$HOST_UID" -g "$HOST_GID" dev \
