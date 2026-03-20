@@ -16,6 +16,7 @@ set -eo pipefail
 SSH_PORT=22              # SSH 服务端口
 VSCODE_PORT=8080         # code-server 服务端口
 OPENCLAW_PORT=18789      # OpenClaw 服务端口
+TEMPORARY_PORT=9321      # 临时测试服务端口 
 
 # 系统环境检测
 HOST_UID=$(id -u)        # 宿主机当前用户 UID（用于文件权限映射）
@@ -206,6 +207,7 @@ DOCKER_CMD+=(
     -p "${PORT_BASE}22:$SSH_PORT"      # SSH 端口
     -p "${PORT_BASE}80:$VSCODE_PORT"   # code-server 端口
     -p "${PORT_BASE}789:$OPENCLAW_PORT"   # openclaw 端口
+    -p "${PORT_BASE}321:$TEMPORARY_PORT"   # 临时测试服务 端口
 )
 
 # 4. GPU 支持自动检测
@@ -252,6 +254,7 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
     echo "   ├─ Web VS Code:   http://YOUR_SERVER_IP:${PORT_BASE}80"
     echo "   └─ SSH 终端:      ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
     echo "   └─ OpenClaw 端口: http://YOUR_SERVER_IP:${PORT_BASE}789"
+    echo "   └─ 临时测试服务 端口: http://YOUR_SERVER_IP:${PORT_BASE}321"
     echo ""
 
     # 资源配置
