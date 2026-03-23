@@ -44,8 +44,8 @@ RUN set -eux \
        } \
     && retry apt-get update \
     && retry apt-get install -y --no-install-recommends \
-        curl sudo wget git gh git-filter-repo vim nano net-tools gnupg ca-certificates file tree \
-        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep \
+        curl sudo wget git gh vim nano net-tools gnupg ca-certificates file tree \
+        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep jq iproute2\
     # 系统级时区与语言配置
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
