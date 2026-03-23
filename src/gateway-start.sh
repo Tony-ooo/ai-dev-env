@@ -10,6 +10,8 @@ STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME_DIR}/.openclaw}"
 CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${STATE_DIR}/openclaw.json}"
 PROBE_RETRIES="${GATEWAY_PROBE_RETRIES:-20}"
 PROBE_INTERVAL="${GATEWAY_PROBE_INTERVAL:-1}"
+LISTENER_RETRIES="${GATEWAY_LISTENER_RETRIES:-15}"
+LISTENER_INTERVAL="${GATEWAY_LISTENER_INTERVAL:-1}"
 
 export PATH="${HOME_DIR}/.local/bin:${HOME_DIR}/.npm-global/bin:${HOME_DIR}/bin:${HOME_DIR}/.volta/bin:${HOME_DIR}/.asdf/shims:${HOME_DIR}/.bun/bin:${HOME_DIR}/Library/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
@@ -71,7 +73,8 @@ if [ -z "${OPENCLAW_BIN:-}" ] || [ ! -x "${OPENCLAW_BIN}" ]; then
   exit 1
 fi
 
-OPENCLAW_RUNTIME_VERSION="$("${OPENCLAW_BIN}" --version 2>/dev/null | tr -d '\r' | head -n1 | awk '{print $1}' || true)"
+OPENCLAW_RUNTIME_VERSION="$("${OPENCLAW_BIN}" --version 2>/dev/null | tr -d '\r' | head -n1 || true)"
+OPENCLAW_RUNTIME_VERSION="${OPENCLAW_RUNTIME_VERSION#OpenClaw }"
 if [ -n "${OPENCLAW_RUNTIME_VERSION:-}" ]; then
   # 动态注入当前二进制版本，避免网关自检显示 unknown。
   export OPENCLAW_SERVICE_VERSION="${OPENCLAW_RUNTIME_VERSION}"
@@ -145,20 +148,42 @@ resolve_probe_port() {
 
 PROBE_PORT="$(resolve_probe_port)"
 
-probe_once() {
-  local -a args
-  args=("${OPENCLAW_BIN}" gateway health --url "ws://127.0.0.1:${PROBE_PORT}" --timeout 3000)
+port_listening() {
+  ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq ":${PROBE_PORT}$"
+}
 
-  if [ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
-    args+=(--token "${OPENCLAW_GATEWAY_TOKEN}")
-  elif [ -n "${OPENCLAW_GATEWAY_PASSWORD:-}" ]; then
-    args+=(--password "${OPENCLAW_GATEWAY_PASSWORD}")
+probe_once() {
+  local status_output
+  local channels_output
+
+  if "${OPENCLAW_BIN}" gateway probe >/dev/null 2>&1; then
+    return 0
   fi
 
-  "${args[@]}" >/dev/null 2>&1
+  status_output="$("${OPENCLAW_BIN}" gateway status --deep 2>&1 || true)"
+  if printf '%s\n' "${status_output}" | grep -Fq "RPC probe: ok"; then
+    return 0
+  fi
+
+  channels_output="$("${OPENCLAW_BIN}" channels status --probe 2>&1 || true)"
+  if printf '%s\n' "${channels_output}" | grep -Fq "Gateway reachable."; then
+    return 0
+  fi
+
+  return 1
 }
 
 # 5) 健康检查（本地优先）。
+echo "Waiting for gateway listener on local port ${PROBE_PORT}..."
+for i in $(seq 1 "${LISTENER_RETRIES}"); do
+  sleep "${LISTENER_INTERVAL}"
+
+  if port_listening; then
+    echo "Gateway listener detected on attempt ${i}/${LISTENER_RETRIES}."
+    break
+  fi
+done
+
 echo "Probing local gateway health..."
 for i in $(seq 1 "${PROBE_RETRIES}"); do
   sleep "${PROBE_INTERVAL}"
@@ -168,18 +193,14 @@ for i in $(seq 1 "${PROBE_RETRIES}"); do
     echo "[$(date '+%F %T')] Gateway restart sequence completed."
     exit 0
   fi
-
-  if "${OPENCLAW_BIN}" gateway probe >/dev/null 2>&1; then
-    echo "Gateway probe passed on attempt ${i}/${PROBE_RETRIES}."
-    echo "[$(date '+%F %T')] Gateway restart sequence completed."
-    exit 0
-  fi
 done
 
 echo "Gateway probe failed after restart."
 echo "Detailed diagnostics:"
-"${OPENCLAW_BIN}" gateway health --url "ws://127.0.0.1:${PROBE_PORT}" --timeout 3000 || true
-"${OPENCLAW_BIN}" gateway probe || true
+ss -ltn 2>/dev/null | awk -v port="${PROBE_PORT}" 'NR == 1 || $4 ~ ":" port "$"'
+"${OPENCLAW_BIN}" gateway status --deep || true
+"${OPENCLAW_BIN}" channels status --probe || true
+"${OPENCLAW_BIN}" health || true
 pm2 describe "${APP_NAME}" || true
 pm2 logs "${APP_NAME}" --lines 80 --nostream || true
 exit 1
