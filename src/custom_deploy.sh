@@ -135,14 +135,14 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 | Bash | 5.x | 默认 Shell |
 | OpenSSH Server | 最新 | 方便远程 SSH 登录 |
 | **Node.js** | 22.x | 由 NodeSource 仓库安装 |
-| **Python** | 3.10 | 由 Miniconda 提供 |
+| **Python** | 系统默认版本 | 默认使用系统自带 `python`/`python3`，Miniconda 可按需手动激活 |
 | code-server | 最新 | VS Code Web 版 |
 | **uv** | 最新 | Rust 实现的极速 Python 包管理器 |
 | Git / Vim / curl / build-essential | 最新 | 常用开发工具 |
 | **Claude Code / Codex / Gemini / OpenClaw** | 最新 | 常用 AI 工具 |
 
 > 注：
-1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version` 等命令查看。
+1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version`、`python3 --version` 等命令查看；如需使用 Conda 环境，请先执行 `conda activate base` 或激活你自己的环境。
 2. 容器内 OpenClaw 网关启动/重启命令已替换为由 PM2 后台进程管理，默认跟随容器启动/重启，手动执行命令为：`gwstart`
 3. 容器启动后需通过 `openclaw onboard` 或 `openclaw config` 命令进行首次配置，配置完成后，后续启动可直接使用，无需重新配置。
 

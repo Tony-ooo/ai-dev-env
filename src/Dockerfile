@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C.UTF-8 \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
-    PATH=/home/dev/miniconda3/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
+    PATH=/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
 
 # 更改 shell 默认行为：遇到错误立即退出，处理管道错误
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -45,7 +45,8 @@ RUN set -eux \
     && retry apt-get update \
     && retry apt-get install -y --no-install-recommends \
         curl sudo wget git gh vim nano net-tools gnupg ca-certificates file tree \
-        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep jq iproute2\
+        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep jq iproute2 \
+        python3 python3-pip python3-venv python-is-python3 \
     # 系统级时区与语言配置
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
@@ -96,8 +97,9 @@ RUN ARCH=$(uname -m) \
     && curl -sSLo /tmp/miniconda.sh "$MINICONDA_URL" \
     && bash /tmp/miniconda.sh -b -p ~/miniconda3 \
     && rm /tmp/miniconda.sh \
-    && ~/miniconda3/bin/conda clean -afy \
-    && ~/miniconda3/bin/conda init bash
+    && ~/miniconda3/bin/conda config --set auto_activate_base false \
+    && ~/miniconda3/bin/conda init bash \
+    && ~/miniconda3/bin/conda clean -afy
 
 # 3. 安装 npm 全局工具
 RUN mkdir -p ~/.npm-global \
