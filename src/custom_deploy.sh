@@ -14,8 +14,6 @@ set -eo pipefail
 
 # 容器内固定端口（通过宿主机端口映射对外暴露）
 SSH_PORT=22              # SSH 服务端口
-VSCODE_PORT=8080         # code-server 服务端口
-OPENCLAW_PORT=18789      # OpenClaw 服务端口
 TEMPORARY_PORT=9321      # 临时测试服务端口 
 
 # 系统环境检测
@@ -32,14 +30,13 @@ MEMORY=""                # 内存限制（例如：4g 或 2048m）
 # ============================================================
 # 必填参数：
 #   --user-name      用户名（容器命名和数据目录标识）
-#   --port-base      端口基数（例如：101 表示映射 10122 和 10180）
-#   --user_password  用户密码（SSH 和 code-server 登录密码）
+#   --port-base      端口基数（例如：101 表示映射 10122）
+#   --user_password  用户密码（SSH 登录密码）
 #   --base_data_dir  宿主机数据根目录
 #   --image          Docker 镜像名称
 # 可选参数：
 #   --cpu            CPU 限制
 #   --memory         内存限制
-#   --enable-https   启用 HTTPS（true/false，默认 false）
 # ============================================================
 
 while [[ $# -gt 0 ]]; do
@@ -51,7 +48,6 @@ while [[ $# -gt 0 ]]; do
         --cpu)            CPUS="$2"; shift 2 ;;
         --memory)         MEMORY="$2"; shift 2 ;;
         --image)          IMAGE_NAME="$2"; shift 2 ;;
-        --enable-https)   ENABLE_HTTPS="$2"; shift 2 ;;
         *)
             echo "❌ 错误: 未知参数 '$1'"
             echo "用法示例："
@@ -81,7 +77,6 @@ done
 #   $BASE_DATA_DIR/$USER_NAME/
 #   ├── workspace/          # 工作区（代码项目）
 #   ├── ai-configs/         # AI 配置
-#   ├── .code-server/       # Code Server 数据（开源服务器Web版）
 #   ├── .vscode-server/     # VSCode Server 数据（官方服务器）
 #   └── .bashrc.extra       # 用户自定义 shell 配置
 # ============================================================
@@ -102,14 +97,11 @@ BASHRC_EXTRA_DIR="$DATA_DIR/.bashrc.extra"
 CLAUDE_DIR="$DATA_DIR/ai-configs/.claude"
 CLAUDE_JSON_DIR="$DATA_DIR/ai-configs/.claude.json"
 CODEX_DIR="$DATA_DIR/ai-configs/.codex"
-GEMINI_DIR="$DATA_DIR/ai-configs/.gemini"
-OPENCLAW_DIR="$DATA_DIR/ai-configs/.openclaw"
 VSCODE_SERVER_DIR="$DATA_DIR/.vscode-server"
-CODE_SERVER_DIR="$DATA_DIR/.code-server"
 WORKSPACE_DIR="$DATA_DIR/workspace"
 
 # 3. 创建所有必要目录
-mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERVER_DIR" "$CODE_SERVER_DIR" "$OPENCLAW_DIR"
+mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR"
 
 # 3. 创建配置文件（仅当不存在时）
 # 注意：先删除可能被 Docker 自动创建的同名目录
@@ -124,7 +116,7 @@ mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$GEMINI_DIR" "$VSCODE_SERV
 cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 # 欢迎使用团队 AI 云端工作站
 
-您正在使用基于 Docker 构建的 **AI 编码 4.0** 环境。
+您正在使用基于 Docker 构建的 **AI 编码** 环境。
 
 ## 快速提示
 
@@ -136,15 +128,12 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 | OpenSSH Server | 最新 | 方便远程 SSH 登录 |
 | **Node.js** | 22.x | 由 NodeSource 仓库安装 |
 | **Python** | 系统默认版本 | 默认使用系统自带 `python`/`python3`，Miniconda 可按需手动激活 |
-| code-server | 最新 | VS Code Web 版 |
 | **uv** | 最新 | Rust 实现的极速 Python 包管理器 |
 | Git / Vim / curl / build-essential | 最新 | 常用开发工具 |
-| **Claude Code / Codex / Gemini / OpenClaw** | 最新 | 常用 AI 工具 |
+| **Claude Code / Codex** | 最新 | 常用 AI 工具 |
 
 > 注：
 1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version`、`python3 --version` 等命令查看；如需使用 Conda 环境，请先执行 `conda activate base` 或激活你自己的环境。
-2. 容器内 OpenClaw 网关启动/重启命令已替换为由 PM2 后台进程管理，默认跟随容器启动/重启，手动执行命令为：`gwstart`
-3. 容器启动后需通过 `openclaw onboard` 或 `openclaw config` 命令进行首次配置，配置完成后，后续启动可直接使用，无需重新配置。
 
 ## 目录结构
 - `/home/dev`：您的用户主目录。
@@ -160,17 +149,17 @@ EOF
 # 第五步：构建 Docker 运行命令
 # ============================================================
 # 组装完整的 docker run 命令，包括：
-# - 容器命名规则：ai-dev-{用户名}-{端口基数}80
+# - 容器命名规则：ai-dev-{用户名}-{端口基数}22
 # - 资源限制（CPU/内存）
 # - 目录挂载（持久化用户数据）
-# - 端口映射（SSH 和 code-server）
+# - 端口映射（SSH 和临时测试服务）
 # - GPU 自动检测与配置
 # ============================================================
 
 # 1. 基础命令（容器名称、重启策略）
 DOCKER_CMD=(
     docker run -d
-    --name "ai-dev-${USER_NAME}-${PORT_BASE}80"
+    --name "ai-dev-${USER_NAME}-${PORT_BASE}22"
     --restart always
     --add-host=host.docker.internal:host-gateway
 )
@@ -192,21 +181,15 @@ DOCKER_CMD+=(
     -v "$CLAUDE_DIR:/home/dev/.claude"
     -v "$CLAUDE_JSON_DIR:/home/dev/.claude.json"
     -v "$CODEX_DIR:/home/dev/.codex"
-    -v "$GEMINI_DIR:/home/dev/.gemini"
     -v "$VSCODE_SERVER_DIR:/home/dev/.vscode-server"
-    -v "$OPENCLAW_DIR:/home/dev/.openclaw"
-    -v "$CODE_SERVER_DIR:/home/dev/.local/share/code-server"
 
     # 环境变量（用于 entrypoint.sh 权限处理）
     -e "HOST_UID=$HOST_UID"
     -e "HOST_GID=$HOST_GID"
     -e "USER_PASSWORD=$USER_PASSWORD"
-    -e "ENABLE_HTTPS=${ENABLE_HTTPS:-false}"
 
     # 端口映射（宿主机:容器）
     -p "${PORT_BASE}22:$SSH_PORT"      # SSH 端口
-    -p "${PORT_BASE}80:$VSCODE_PORT"   # code-server 端口
-    -p "${PORT_BASE}789:$OPENCLAW_PORT"   # openclaw 端口
     -p "${PORT_BASE}321:$TEMPORARY_PORT"   # 临时测试服务 端口
 )
 
@@ -251,9 +234,7 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
 
     # 访问方式
     echo "🌐 访问方式："
-    echo "   ├─ Web VS Code:   http://YOUR_SERVER_IP:${PORT_BASE}80"
-    echo "   └─ SSH 终端:      ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
-    echo "   └─ OpenClaw 端口: http://YOUR_SERVER_IP:${PORT_BASE}789"
+    echo "   ├─ SSH 终端:      ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
     echo "   └─ 临时测试服务 端口: http://YOUR_SERVER_IP:${PORT_BASE}321"
     echo ""
 
@@ -281,9 +262,8 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
     # 重要提示
     echo "⚠️  注意事项："
     echo "   1. 请将 'YOUR_SERVER_IP' 替换为宿主机的实际 IP 地址"
-    echo "   2. 确保防火墙已开放相应端口（${PORT_BASE}22 和 ${PORT_BASE}80）"
-    echo "   3. Web VS Code 和 SSH 使用相同的登录密码"
-    echo "   4. 用户数据持久化到: $DATA_DIR"
+    echo "   2. 确保防火墙已开放相应端口（${PORT_BASE}22 和 ${PORT_BASE}321）"
+    echo "   3. 用户数据持久化到: $DATA_DIR"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -299,7 +279,7 @@ else
     echo "$DOCKER_OUTPUT"
     echo ""
     echo "常见问题排查："
-    echo "  1. 检查端口是否已被占用：lsof -i:${PORT_BASE}22 或 lsof -i:${PORT_BASE}80"
+    echo "  1. 检查端口是否已被占用：lsof -i:${PORT_BASE}22 或 lsof -i:${PORT_BASE}321"
     echo "  2. 检查容器名称是否冲突：docker ps -a | grep ai-dev-${USER_NAME}"
     echo "  3. 检查镜像是否存在：docker images | grep $IMAGE_NAME"
     echo "  4. 检查 Docker 服务状态：systemctl status docker"

@@ -4,11 +4,8 @@ ARG HOST_UID=1000
 ARG HOST_GID=1000
 ARG MINICONDA_VERSION=py310_23.5.2-0
 ARG NODE_VERSION=22
-ARG OPENCLAW_VERSION=latest
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
     PATH=/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
@@ -75,7 +72,7 @@ RUN set -eux \
     && apt-get autoremove -y && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/*
 
-# 避免 locale 尚未生成时出现告警
+# locale 已生成后，将最终镜像环境切换到 en_US.UTF-8
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
     
@@ -106,24 +103,17 @@ RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
-    && echo 'alias gwstart="/usr/local/bin/gateway-start.sh"' >> ~/.bashrc \
-    && npm config set registry "https://registry.npmmirror.com" \
-    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest @google/gemini-cli@latest pm2@latest openclaw@${OPENCLAW_VERSION} \
+    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest \
     && npm cache clean --force
     
-# 4. 安装 code-server
-RUN curl -fsSL "https://code-server.dev/install.sh" | PREFIX=~/.local sh -s -- --method=standalone \
-    && rm -rf .cache/*
-
 # --- 切回 root 配置入口脚本权限 ---
 USER root
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY gateway-start.sh /usr/local/bin/gateway-start.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/gateway-start.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # 暴露端口
-EXPOSE 22 8080 18789
+EXPOSE 22 9321
 
 # 切换回 dev 用户作为默认运行用户
 USER dev

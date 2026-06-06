@@ -1,4 +1,8 @@
 .DS_Store
 .history
 amd64/build.sh
+amd64/push_image.sh
+amd64/quick_deploy.sh
 arm64/build.sh
+arm64/push_image.sh
+arm64/quick_deploy.sh

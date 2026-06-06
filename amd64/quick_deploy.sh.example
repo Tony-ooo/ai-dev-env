@@ -8,12 +8,11 @@
 #   BASE_DATA_DIR   - 基础数据目录（示例: BASE_DATA_DIR="/new/path"）
 #   CPUS            - CPU 核心数限制（空表示不限制）（示例: --cpu 4）
 #   MEMORY          - 内存大小限制（空表示不限制）（示例: --memory 8g）
-#   ENABLE_HTTPS    - 启用 HTTPS（true/false，默认 false）（示例: ENABLE_HTTPS="true"）
 # ==================================================
 
 echo "=================================================="
 echo "Starting Docker image deployment process..."
-echo "Image: tonyooo/ai-dev-env:4.1-arm64"
+echo "Image: tonyooo/ai-dev-env:5.0-amd64"
 echo "GPU: auto-detect"
 echo "=================================================="
 
@@ -22,9 +21,8 @@ PORT_BASE=30
 USER_PASSWORD=$(openssl rand -base64 32 | tr -d '=+/.' | cut -c1-32)
 
 # 自定义参数
-BASE_DATA_DIR="/Users/wangtao/Documents/DockerSpace/ai-cloud-station/user-data"
-IMAGE_NAME="tonyooo/ai-dev-env:4.1-arm64"
-ENABLE_HTTPS="false"
+BASE_DATA_DIR="D:/xxx/user-data"
+IMAGE_NAME="tonyooo/ai-dev-env:5.0-amd64"
 
 # 执行部署脚本，GPU 自动检测
 bash --login -c "../src/custom_deploy.sh \
@@ -32,8 +30,7 @@ bash --login -c "../src/custom_deploy.sh \
 --port-base $PORT_BASE \
 --user_password $USER_PASSWORD \
 --base_data_dir $BASE_DATA_DIR \
---image $IMAGE_NAME \
---enable-https $ENABLE_HTTPS"
+--image $IMAGE_NAME"
 DEPLOY_STATUS=$?
 
 echo

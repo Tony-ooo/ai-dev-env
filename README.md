@@ -16,7 +16,6 @@ AI 云站开发环境 Docker 镜像构建配置。
 ├── src/            # Docker 镜像源文件
 │   ├── Dockerfile      - Docker 镜像构建文件
 │   ├── entrypoint.sh   - 容器启动入口脚本
-│   ├── gateway-start.sh - OpenClaw PM2 后台管理脚本
 │   └── custom_deploy.sh - 自定义部署脚本
 └── README.md            - 项目说明文档
 ```
