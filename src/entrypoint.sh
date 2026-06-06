@@ -188,4 +188,6 @@ else
 fi
 
 echo "🚀 启动 SSH 服务（端口: $SSH_PORT）..."
-exec /usr/sbin/sshd -D -e
+/usr/sbin/sshd -t
+echo "✅ SSH 服务已成功启动"
+exec /usr/sbin/sshd -D

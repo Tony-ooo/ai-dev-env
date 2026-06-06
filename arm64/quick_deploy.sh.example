@@ -8,6 +8,7 @@
 #   BASE_DATA_DIR   - 基础数据目录（示例: BASE_DATA_DIR="/new/path"）
 #   CPUS            - CPU 核心数限制（空表示不限制）（示例: --cpu 4）
 #   MEMORY          - 内存大小限制（空表示不限制）（示例: --memory 8g）
+#   BIND_ADDRESS    - 端口监听地址（默认 127.0.0.1；远程访问可设为 0.0.0.0）
 # ==================================================
 
 echo "=================================================="
@@ -19,6 +20,7 @@ echo "=================================================="
 USER_NAME=tony
 PORT_BASE=30
 USER_PASSWORD=$(openssl rand -base64 32 | tr -d '=+/.' | cut -c1-32)
+BIND_ADDRESS=127.0.0.1
 
 # 自定义参数
 BASE_DATA_DIR="/Users/xxx/user-data"
@@ -30,6 +32,7 @@ bash --login -c "../src/custom_deploy.sh \
 --port-base $PORT_BASE \
 --user_password $USER_PASSWORD \
 --base_data_dir $BASE_DATA_DIR \
+--bind-address $BIND_ADDRESS \
 --image $IMAGE_NAME"
 DEPLOY_STATUS=$?
 

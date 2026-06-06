@@ -15,6 +15,7 @@ set -eo pipefail
 # 容器内固定端口（通过宿主机端口映射对外暴露）
 SSH_PORT=22              # SSH 服务端口
 TEMPORARY_PORT=9321      # 临时测试服务端口 
+BIND_ADDRESS=${BIND_ADDRESS:-127.0.0.1}  # 默认仅绑定宿主机本机地址，避免局域网扫描
 
 # 系统环境检测
 HOST_UID=$(id -u)        # 宿主机当前用户 UID（用于文件权限映射）
@@ -37,6 +38,7 @@ MEMORY=""                # 内存限制（例如：4g 或 2048m）
 # 可选参数：
 #   --cpu            CPU 限制
 #   --memory         内存限制
+#   --bind-address   宿主机监听地址（默认 127.0.0.1；远程访问可显式设为 0.0.0.0）
 # ============================================================
 
 while [[ $# -gt 0 ]]; do
@@ -47,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         --base_data_dir)  BASE_DATA_DIR="$2"; shift 2 ;;
         --cpu)            CPUS="$2"; shift 2 ;;
         --memory)         MEMORY="$2"; shift 2 ;;
+        --bind-address)   BIND_ADDRESS="$2"; shift 2 ;;
         --image)          IMAGE_NAME="$2"; shift 2 ;;
         *)
             echo "❌ 错误: 未知参数 '$1'"
@@ -69,6 +72,11 @@ done
 : "${BASE_DATA_DIR:?❌ 必须指定 --base_data_dir（数据目录）}"
 : "${IMAGE_NAME:?❌ 必须指定 --image（Docker 镜像）}"
 : "${PORT_BASE:?❌ 必须指定 --port-base（端口基数）}"
+
+if [[ ! "$BIND_ADDRESS" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    echo "❌ --bind-address 仅支持 IPv4 地址，当前值: $BIND_ADDRESS"
+    exit 1
+fi
 
 # ============================================================
 # 第四步：用户数据目录准备
@@ -189,8 +197,8 @@ DOCKER_CMD+=(
     -e "USER_PASSWORD=$USER_PASSWORD"
 
     # 端口映射（宿主机:容器）
-    -p "${PORT_BASE}22:$SSH_PORT"      # SSH 端口
-    -p "${PORT_BASE}321:$TEMPORARY_PORT"   # 临时测试服务 端口
+    -p "${BIND_ADDRESS}:${PORT_BASE}22:$SSH_PORT"      # SSH 端口
+    -p "${BIND_ADDRESS}:${PORT_BASE}321:$TEMPORARY_PORT"   # 临时测试服务 端口
 )
 
 # 4. GPU 支持自动检测
@@ -233,9 +241,18 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
     echo ""
 
     # 访问方式
+    if [[ "$BIND_ADDRESS" == "127.0.0.1" ]]; then
+        ACCESS_HOST="$BIND_ADDRESS"
+        ACCESS_NOTE="当前端口仅绑定本机，局域网/外网无法直接访问"
+    else
+        ACCESS_HOST="YOUR_SERVER_IP"
+        ACCESS_NOTE="当前端口已绑定 $BIND_ADDRESS，请确保只向可信来源开放"
+    fi
+
     echo "🌐 访问方式："
-    echo "   ├─ SSH 终端:      ssh dev@YOUR_SERVER_IP -p ${PORT_BASE}22"
-    echo "   └─ 临时测试服务 端口: http://YOUR_SERVER_IP:${PORT_BASE}321"
+    echo "   ├─ 监听地址:      $BIND_ADDRESS"
+    echo "   ├─ SSH 终端:      ssh dev@$ACCESS_HOST -p ${PORT_BASE}22"
+    echo "   └─ 临时测试服务 端口: http://$ACCESS_HOST:${PORT_BASE}321"
     echo ""
 
     # 资源配置
@@ -261,8 +278,8 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
 
     # 重要提示
     echo "⚠️  注意事项："
-    echo "   1. 请将 'YOUR_SERVER_IP' 替换为宿主机的实际 IP 地址"
-    echo "   2. 确保防火墙已开放相应端口（${PORT_BASE}22 和 ${PORT_BASE}321）"
+    echo "   1. $ACCESS_NOTE"
+    echo "   2. 如需远程访问，请显式添加 --bind-address 0.0.0.0 并配置防火墙白名单"
     echo "   3. 用户数据持久化到: $DATA_DIR"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -64,6 +64,8 @@ cd amd64 && ./quick_deploy.sh
 cd arm64 && ./quick_deploy.sh
 ```
 
+默认部署时，SSH 和临时测试服务端口仅绑定到宿主机 `127.0.0.1`，避免局域网或外网扫描产生异常登录日志。如需远程访问，请在部署脚本中显式设置 `--bind-address 0.0.0.0`，并配合防火墙白名单限制来源 IP。
+
 ## License
 
 本项目采用 MIT License。
