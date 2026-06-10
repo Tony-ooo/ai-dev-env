@@ -103,7 +103,7 @@ RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
-    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest \
+    && npm install -g pm2@latest @anthropic-ai/claude-code@latest @openai/codex@latest \
     && npm cache clean --force
     
 # --- 切回 root 配置入口脚本权限 ---
