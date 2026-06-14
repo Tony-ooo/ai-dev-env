@@ -15,7 +15,10 @@ AI 云站开发环境 Docker 镜像构建配置。
 │   └── quick_deploy.sh - 快速部署脚本
 ├── src/            # Docker 镜像源文件
 │   ├── Dockerfile      - Docker 镜像构建文件
+│   ├── docker-entrypoint.sh - 容器入口脚本，校验 s6 服务后启动 /init
 │   ├── entrypoint.sh   - s6-overlay 容器初始化脚本
+│   ├── start-sshd.sh   - SSHD 长运行服务启动脚本
+│   ├── s6-services-guard.sh - s6 服务定义校验与隔离脚本
 │   ├── custom_deploy.sh - 自定义部署脚本
 │   └── workspace_welcome.md - 工作区欢迎文档模板
 ├── skills/         # 项目技能文档
