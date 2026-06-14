@@ -26,6 +26,10 @@ GPU_ENABLED=false        # GPU 启用标志（自动检测）
 CPUS=""                  # CPU 核心数限制（例如：2 或 1.5）
 MEMORY=""                # 内存限制（例如：4g 或 2048m）
 
+# 脚本资源路径
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+WORKSPACE_WELCOME_DOC="$SCRIPT_DIR/workspace_welcome.md"
+
 # ============================================================
 # 第二步：命令行参数解析
 # ============================================================
@@ -120,59 +124,12 @@ mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR"
 # - mkdir 创建的目录自动归属当前用户，通常无需手动修正
 # - 容器启动时，entrypoint.sh 会根据 HOST_UID/GID 自动调整所有挂载目录的权限
 
-# 3. 初始化工作区欢迎文档
-cat <<'EOF' > "$WORKSPACE_DIR/README.md"
-# 欢迎使用团队 AI 云端工作站
-
-您正在使用基于 Docker 构建的 **AI 编码** 环境。
-
-## 快速提示
-
-## 预装工具 (常见版本)
-| 工具 | 版本 | 说明 |
-|------|------|------|
-| Ubuntu | 22.04 LTS | 基础镜像 |
-| Bash | 5.x | 默认 Shell |
-| OpenSSH Server | 最新 | 方便远程 SSH 登录 |
-| **Node.js** | 22.x | 由 NodeSource 仓库安装 |
-| **Python** | 系统默认版本 | 默认使用系统自带 `python`/`python3`，Miniconda 可按需手动激活 |
-| **uv** | 最新 | Rust 实现的极速 Python 包管理器 |
-| Git / Vim / curl / build-essential | 最新 | 常用开发工具 |
-| **Claude Code / Codex** | 最新 | 常用 AI 工具 |
-
-> 注：
-1. 版本号可能随镜像重新构建而更新，可在终端通过 `node -v`、`python --version`、`python3 --version` 等命令查看；如需使用 Conda 环境，请先执行 `conda activate base` 或激活你自己的环境。
-
-## 目录结构
-- `/home/dev`：您的用户主目录。
-- `/home/dev/workspace`：持久化工作区，会映射到宿主机。
-
-## 创建系统守护进程
-
-容器使用 s6-overlay 作为 1 号主进程。您可以在容器内部创建由 s6 管理的守护进程，同一个容器重启后会自动拉起。
-
-```bash
-sudo mkdir -p /etc/services.d/my-service
-sudo tee /etc/services.d/my-service/run >/dev/null <<'SERVICE_EOF'
-#!/command/with-contenv bash
-exec /path/to/your-daemon --foreground
-SERVICE_EOF
-sudo chmod +x /etc/services.d/my-service/run
-```
-
-服务进程需要以前台方式运行，不要在 `run` 脚本中使用 `&` 后台启动。创建完成后，从宿主机重启容器即可触发 s6 自动启动该服务：
-
-```bash
-docker restart <container>
-```
-
-如果删除容器并重新创建，容器内部手动创建的服务文件会丢失；需要长期保留时，请将服务定义写入镜像或从宿主机挂载到 `/etc/services.d/`。
-
-## 资源限制
-管理员在部署脚本中为每个容器设置了 `--cpus` 与 `--memory` 参数，避免资源争用。如需更多资源，请联系管理员。
-
-祝你编码愉快！
-EOF
+# 4. 初始化工作区欢迎文档
+if [[ ! -f "$WORKSPACE_WELCOME_DOC" ]]; then
+    echo "❌ 工作区欢迎文档不存在: $WORKSPACE_WELCOME_DOC"
+    exit 1
+fi
+cp "$WORKSPACE_WELCOME_DOC" "$WORKSPACE_DIR/README.md"
 
 # ============================================================
 # 第五步：构建 Docker 运行命令
@@ -189,7 +146,7 @@ EOF
 DOCKER_CMD=(
     docker run -d
     --name "ai-dev-${USER_NAME}-${PORT_BASE}22"
-    --restart always
+    --restart unless-stopped
     --add-host=host.docker.internal:host-gateway
 )
 
