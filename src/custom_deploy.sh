@@ -90,6 +90,7 @@ fi
 #   ├── workspace/          # 工作区（代码项目）
 #   ├── ai-configs/         # AI 配置
 #   ├── .vscode-server/     # VSCode Server 数据（官方服务器）
+#   ├── s6-services/        # s6-overlay service definitions
 #   └── .bashrc.extra       # 用户自定义 shell 配置
 # ============================================================
 
@@ -111,9 +112,14 @@ CLAUDE_JSON_DIR="$DATA_DIR/ai-configs/.claude.json"
 CODEX_DIR="$DATA_DIR/ai-configs/.codex"
 VSCODE_SERVER_DIR="$DATA_DIR/.vscode-server"
 WORKSPACE_DIR="$DATA_DIR/workspace"
+S6_SERVICES_DIR="$DATA_DIR/s6-services"
 
 # 3. 创建所有必要目录
-mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR"
+mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR" \
+    "$S6_SERVICES_DIR/user/contents.d" "$S6_SERVICES_DIR/user2/contents.d"
+
+[[ ! -f "$S6_SERVICES_DIR/user/type" ]] && printf 'bundle\n' > "$S6_SERVICES_DIR/user/type"
+[[ ! -f "$S6_SERVICES_DIR/user2/type" ]] && printf 'bundle\n' > "$S6_SERVICES_DIR/user2/type"
 
 # 3. 创建配置文件（仅当不存在时）
 # 注意：先删除可能被 Docker 自动创建的同名目录
@@ -168,6 +174,7 @@ DOCKER_CMD+=(
     -v "$CLAUDE_JSON_DIR:/home/dev/.claude.json"
     -v "$CODEX_DIR:/home/dev/.codex"
     -v "$VSCODE_SERVER_DIR:/home/dev/.vscode-server"
+    -v "$S6_SERVICES_DIR:/etc/s6-overlay/s6-rc.d"
 
     # 环境变量（用于 entrypoint.sh 权限处理）
     -e "HOST_UID=$HOST_UID"
@@ -259,6 +266,7 @@ if DOCKER_OUTPUT=$("${DOCKER_CMD[@]}" 2>&1); then
     echo "   1. $ACCESS_NOTE"
     echo "   2. 如需远程访问，请显式添加 --bind-address 0.0.0.0 并配置防火墙白名单"
     echo "   3. 用户数据持久化到: $DATA_DIR"
+    echo "   4. s6 服务定义持久化到: $S6_SERVICES_DIR"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 

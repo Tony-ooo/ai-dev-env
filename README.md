@@ -73,7 +73,7 @@ cd arm64 && ./quick_deploy.sh
 
 镜像使用 s6-overlay 作为容器 1 号主进程。容器初始化阶段会以 root 执行用户 UID/GID、密码、SSH 与挂载目录权限配置；通过 SSH 登录后仍进入 `dev` 用户。如需通过 `docker exec` 进入 `dev` 用户，请使用 `docker exec -u dev -it <container> bash`。
 
-容器运行后，可以在容器内部创建 s6 管理的守护进程。服务定义保存在 `/etc/services.d/<service-name>/run`，同一个容器重启后会由 s6 自动拉起。具体设置参考技能 `skills/s6-service-manager`
+容器运行后，可以在容器内部创建 s6 管理的守护进程。s6-overlay v3 服务定义保存在 `/etc/s6-overlay/s6-rc.d`，并由部署脚本挂载到宿主机 `$BASE_DATA_DIR/$USER_NAME/s6-services`；同一个容器重启后会由 s6 自动拉起。运行时监督目录为 `/run/service`。启动时会先检查持久化服务定义，发现缺少 `type`/`run`、`run` 工作目录不存在、或编译失败的服务时，会把对应服务隔离到 `.disabled-by-guard` 隐藏目录，避免影响容器启动。具体设置参考技能 `skills/s6-service-manager`
 
 ## License
 

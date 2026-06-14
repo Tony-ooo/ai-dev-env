@@ -135,7 +135,12 @@ USER root
 
 COPY entrypoint.sh /etc/cont-init.d/10-dev-env-init
 COPY start-sshd.sh /usr/local/bin/start-sshd.sh
-RUN chmod +x /etc/cont-init.d/10-dev-env-init /usr/local/bin/start-sshd.sh
+COPY s6-services-guard.sh /usr/local/bin/s6-services-guard.sh
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /etc/cont-init.d/10-dev-env-init \
+    /usr/local/bin/start-sshd.sh \
+    /usr/local/bin/s6-services-guard.sh \
+    /usr/local/bin/docker-entrypoint.sh
 
 # 暴露端口
 EXPOSE 22 9321
@@ -144,5 +149,5 @@ EXPOSE 22 9321
 USER root
 WORKDIR /home/dev/workspace
 
-ENTRYPOINT ["/init"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/usr/local/bin/start-sshd.sh"]
