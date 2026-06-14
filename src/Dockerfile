@@ -1,14 +1,18 @@
 FROM ubuntu:22.04
 
+ARG TARGETARCH
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 ARG MINICONDA_VERSION=py310_23.5.2-0
 ARG NODE_VERSION=22
+ARG S6_OVERLAY_VERSION=3.2.3.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai \
     HOME=/home/dev \
-    PATH=/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH
+    PATH=/home/dev/.local/bin:/home/dev/.npm-global/bin:$PATH \
+    S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
+    S6_VERBOSITY=1
 
 # 更改 shell 默认行为：遇到错误立即退出，处理管道错误
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -42,7 +46,7 @@ RUN set -eux \
     && retry apt-get update \
     && retry apt-get install -y --no-install-recommends \
         curl sudo wget git gh vim nano net-tools gnupg ca-certificates file tree \
-        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep jq iproute2 \
+        openssh-server iputils-ping locales tzdata software-properties-common tmux build-essential ripgrep jq iproute2 xz-utils \
         python3 python3-pip python3-venv python-is-python3 \
     # 系统级时区与语言配置
     && locale-gen en_US.UTF-8 \
@@ -75,6 +79,26 @@ RUN set -eux \
 # locale 已生成后，将最终镜像环境切换到 en_US.UTF-8
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
+
+# --- 安装 s6-overlay 作为容器 PID 1 ---
+RUN set -eux \
+    && case "${TARGETARCH:-}" in \
+         amd64) S6_ARCH="x86_64" ;; \
+         arm64) S6_ARCH="aarch64" ;; \
+         "") \
+           case "$(uname -m)" in \
+             x86_64) S6_ARCH="x86_64" ;; \
+             aarch64) S6_ARCH="aarch64" ;; \
+             *) echo "Unsupported s6-overlay arch: $(uname -m)" && exit 1 ;; \
+           esac ;; \
+         *) echo "Unsupported Docker target arch: ${TARGETARCH}" && exit 1 ;; \
+       esac \
+    && S6_BASE_URL="https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}" \
+    && curl -fsSLo /tmp/s6-overlay-noarch.tar.xz "${S6_BASE_URL}/s6-overlay-noarch.tar.xz" \
+    && curl -fsSLo /tmp/s6-overlay-${S6_ARCH}.tar.xz "${S6_BASE_URL}/s6-overlay-${S6_ARCH}.tar.xz" \
+    && tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
+    && tar -C / -Jxpf /tmp/s6-overlay-${S6_ARCH}.tar.xz \
+    && rm -f /tmp/s6-overlay-*.tar.xz
     
 # --- 用户权限操作层 ---
 USER dev
@@ -106,17 +130,19 @@ RUN mkdir -p ~/.npm-global \
     && npm install -g pm2@latest @anthropic-ai/claude-code@latest @openai/codex@latest \
     && npm cache clean --force
     
-# --- 切回 root 配置入口脚本权限 ---
+# --- 切回 root 配置 s6 初始化脚本 ---
 USER root
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh /etc/cont-init.d/10-dev-env-init
+COPY start-sshd.sh /usr/local/bin/start-sshd.sh
+RUN chmod +x /etc/cont-init.d/10-dev-env-init /usr/local/bin/start-sshd.sh
 
 # 暴露端口
 EXPOSE 22 9321
 
-# 切换回 dev 用户作为默认运行用户
-USER dev
+# s6-overlay 需要以 root 作为 PID 1 启动，SSH 登录后仍进入 dev 用户
+USER root
 WORKDIR /home/dev/workspace
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/init"]
+CMD ["/usr/local/bin/start-sshd.sh"]

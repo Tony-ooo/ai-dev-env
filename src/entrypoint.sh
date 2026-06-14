@@ -1,17 +1,10 @@
-#!/bin/bash
+#!/command/with-contenv bash
 set -euo pipefail
 
 # ============================================================
-# 权限管理：提升到 root 执行初始化
+# s6-overlay container initialization hook
 # ============================================================
-CURRENT_USER=$(whoami)
-
-if [ "$CURRENT_USER" = "dev" ]; then
-    echo "🔧 以 dev 用户启动，提升到 root 权限执行初始化..."
-    exec sudo -E "$0" "$@"
-fi
-
-echo "🚀 Entrypoint starting as root..."
+echo "🚀 初始化容器环境..."
 
 # ============================================================
 # 第一步：环境变量与用户 UID/GID 适配
@@ -22,24 +15,18 @@ HOST_GID=${HOST_GID:-1000}
 CURRENT_UID=$(id -u dev)
 CURRENT_GID=$(id -g dev)
 
-echo "🔍 宿主机 UID/GID=$HOST_UID/$HOST_GID, 容器 dev UID/GID=$CURRENT_UID/$CURRENT_GID"
-
 if [ "$HOST_UID" -gt 65535 ] || [ "$HOST_GID" -gt 65535 ]; then
     # Windows 环境
-    echo "⚠️ 检测到 Windows 环境（UID/GID > 65535），跳过用户 ID 修改"
+    echo "⚠️ 检测到 Windows 风格 UID/GID，跳过 dev 用户 ID 适配"
 else
     # Linux/macOS 环境
-    echo "🔧 Linux/macOS 环境：调整容器用户 UID/GID 以匹配宿主机..."
-
     # 调整 UID
     if [ "$CURRENT_UID" -ne "$HOST_UID" ]; then
-        echo "   ├─ 修改 dev 用户 UID: $CURRENT_UID → $HOST_UID"
         usermod -u "$HOST_UID" dev
     fi
 
     # 调整 GID
     if [ "$CURRENT_GID" -ne "$HOST_GID" ]; then
-        echo "   ├─ 修改 dev 用户 GID: $CURRENT_GID → $HOST_GID"
         if getent group "$HOST_GID" >/dev/null; then
             usermod -g "$HOST_GID" dev
         else
@@ -47,7 +34,12 @@ else
             usermod -g "$HOST_GID" dev
         fi
     fi
+
+    echo "✅ dev 用户 ID 已适配: $(id -u dev)/$(id -g dev)"
 fi
+
+touch /home/dev/.sudo_as_admin_successful
+chown dev:dev /home/dev/.sudo_as_admin_successful
 
 # ============================================================
 # 第二步：设置 dev 用户密码
@@ -71,15 +63,17 @@ fi
 SSH_PORT=${SSH_PORT:-22}
 mkdir -p /run/sshd
 sed -i "s/^#\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config
-echo "✅ SSH 服务已配置（端口: $SSH_PORT）"
+echo "✅ SSH 已配置: 端口 $SSH_PORT"
 
 # ============================================================
 # 第四步：修正 /home/dev 目录权限
 # ============================================================
 # 自动探测 /home/dev 下需要修复权限的路径（不再硬编码关键目录）
-echo "🔧 自动探测并修正 /home/dev 下 root 所有权路径..."
+echo "🔧 修正 /home/dev 权限..."
+CHOWN_START=$SECONDS
+CHOWN_EXIT=0
 
-(
+if (
     chown dev:dev /home/dev 2>/dev/null || true
     CHOWN_TARGETS=()
 
@@ -119,75 +113,20 @@ echo "🔧 自动探测并修正 /home/dev 下 root 所有权路径..."
             fi
         fi
     done
-) &
-CHOWN_PID=$!
-CHOWN_START=$SECONDS
-CHOWN_ESTIMATE_SEC=${CHOWN_ESTIMATE_SEC:-100}
-CHOWN_WIDTH=24
-CHOWN_LAST_SHOWN=-1
-
-case "$CHOWN_ESTIMATE_SEC" in
-    ''|*[!0-9]*) CHOWN_ESTIMATE_SEC=100 ;;
-esac
-if [ "$CHOWN_ESTIMATE_SEC" -le 0 ]; then
-    CHOWN_ESTIMATE_SEC=100
-fi
-
-if [ -t 1 ]; then
-    while kill -0 "$CHOWN_PID" 2>/dev/null; do
-        CHOWN_COST=$((SECONDS - CHOWN_START))
-        CHOWN_PERCENT=$((CHOWN_COST * 100 / CHOWN_ESTIMATE_SEC))
-        if [ "$CHOWN_PERCENT" -gt 99 ]; then
-            CHOWN_PERCENT=99
-        fi
-        CHOWN_FILLED=$((CHOWN_PERCENT * CHOWN_WIDTH / 100))
-        CHOWN_EMPTY=$((CHOWN_WIDTH - CHOWN_FILLED))
-        CHOWN_BAR_FILL=$(printf '%*s' "$CHOWN_FILLED" '' | tr ' ' '#')
-        CHOWN_BAR_EMPTY=$(printf '%*s' "$CHOWN_EMPTY" '' | tr ' ' '-')
-        if [ "$CHOWN_COST" -ne "$CHOWN_LAST_SHOWN" ]; then
-            printf "\r   总进度(估算)：[%s%s] %3d%% 进行中 %ss" \
-                "$CHOWN_BAR_FILL" "$CHOWN_BAR_EMPTY" "$CHOWN_PERCENT" "$CHOWN_COST"
-            CHOWN_LAST_SHOWN=$CHOWN_COST
-        fi
-        sleep 0.2
-    done
+); then
+    CHOWN_EXIT=0
 else
-    while kill -0 "$CHOWN_PID" 2>/dev/null; do
-        CHOWN_COST=$((SECONDS - CHOWN_START))
-        CHOWN_PERCENT=$((CHOWN_COST * 100 / CHOWN_ESTIMATE_SEC))
-        if [ "$CHOWN_PERCENT" -gt 99 ]; then
-            CHOWN_PERCENT=99
-        fi
-        CHOWN_FILLED=$((CHOWN_PERCENT * CHOWN_WIDTH / 100))
-        CHOWN_EMPTY=$((CHOWN_WIDTH - CHOWN_FILLED))
-        CHOWN_BAR_FILL=$(printf '%*s' "$CHOWN_FILLED" '' | tr ' ' '#')
-        CHOWN_BAR_EMPTY=$(printf '%*s' "$CHOWN_EMPTY" '' | tr ' ' '-')
-        if [ $((CHOWN_COST % 5)) -eq 0 ] && [ "$CHOWN_COST" -ne "$CHOWN_LAST_SHOWN" ]; then
-            echo "   总进度(估算)：[${CHOWN_BAR_FILL}${CHOWN_BAR_EMPTY}] ${CHOWN_PERCENT}% 进行中 ${CHOWN_COST}s"
-            CHOWN_LAST_SHOWN=$CHOWN_COST
-        fi
-        sleep 1
-    done
+    CHOWN_EXIT=$?
 fi
 
-CHOWN_EXIT=0
-wait "$CHOWN_PID" || CHOWN_EXIT=$?
 CHOWN_COST=$((SECONDS - CHOWN_START))
-CHOWN_BAR_DONE=$(printf '%*s' "$CHOWN_WIDTH" '' | tr ' ' '#')
-
-if [ -t 1 ]; then
-    printf "\r   总进度(估算)：[%s] 100%% 完成 %ss\n" "$CHOWN_BAR_DONE" "$CHOWN_COST"
-else
-    echo "   总进度(估算)：[${CHOWN_BAR_DONE}] 100% 完成 ${CHOWN_COST}s"
-fi
 
 if [ "$CHOWN_EXIT" -eq 0 ]; then
-    echo "✅ 关键目录所有权修正完成"
+    echo "✅ /home/dev 权限已修正 (${CHOWN_COST}s)"
 else
-    echo "⚠️ 关键目录所有权修正部分失败（退出码: $CHOWN_EXIT），继续启动"
+    echo "⚠️ /home/dev 权限修正部分失败（退出码: $CHOWN_EXIT），继续启动"
 fi
 
-echo "🚀 启动 SSH 服务（端口: $SSH_PORT）..."
+echo "🔍 校验 SSH 服务配置（端口: $SSH_PORT）..."
 /usr/sbin/sshd -t
-echo "✅ SSH 服务已成功启动"
-exec /usr/sbin/sshd -D
+echo "✅ 容器初始化完成"

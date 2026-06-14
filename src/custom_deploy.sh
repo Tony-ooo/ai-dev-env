@@ -147,6 +147,27 @@ cat <<'EOF' > "$WORKSPACE_DIR/README.md"
 - `/home/dev`：您的用户主目录。
 - `/home/dev/workspace`：持久化工作区，会映射到宿主机。
 
+## 创建系统守护进程
+
+容器使用 s6-overlay 作为 1 号主进程。您可以在容器内部创建由 s6 管理的守护进程，同一个容器重启后会自动拉起。
+
+```bash
+sudo mkdir -p /etc/services.d/my-service
+sudo tee /etc/services.d/my-service/run >/dev/null <<'SERVICE_EOF'
+#!/command/with-contenv bash
+exec /path/to/your-daemon --foreground
+SERVICE_EOF
+sudo chmod +x /etc/services.d/my-service/run
+```
+
+服务进程需要以前台方式运行，不要在 `run` 脚本中使用 `&` 后台启动。创建完成后，从宿主机重启容器即可触发 s6 自动启动该服务：
+
+```bash
+docker restart <container>
+```
+
+如果删除容器并重新创建，容器内部手动创建的服务文件会丢失；需要长期保留时，请将服务定义写入镜像或从宿主机挂载到 `/etc/services.d/`。
+
 ## 资源限制
 管理员在部署脚本中为每个容器设置了 `--cpus` 与 `--memory` 参数，避免资源争用。如需更多资源，请联系管理员。
 
