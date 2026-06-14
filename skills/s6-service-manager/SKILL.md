@@ -1,6 +1,6 @@
 ---
 name: s6-service-manager
-description: 将任意前台进程封装为 s6 或 s6-overlay longrun 服务并接入守护进程管理。Use when Codex needs to create an s6 run script, convert a nohup/background process into a supervised foreground service, add a service to /run/service, create /etc/s6-overlay/s6-rc.d service definitions, validate s6 status, or document/manage start/stop/restart commands for s6-supervise/s6-overlay.
+description: 将任意前台进程封装为 s6 或 s6-overlay longrun 服务并接入守护进程管理。Use for creating an s6 run script, converting a nohup/background process into a supervised foreground service, adding a service to /run/service, creating /etc/s6-overlay/s6-rc.d service definitions, validating s6 status, or documenting/managing start/stop/restart commands for s6-supervise/s6-overlay.
 ---
 
 # S6 Service Manager

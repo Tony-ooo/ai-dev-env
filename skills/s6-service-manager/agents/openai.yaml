@@ -1,4 +1,0 @@
-interface:
-  display_name: "S6 Service Manager"
-  short_description: "Create and supervise s6 longrun services"
-  default_prompt: "Use $s6-service-manager to create an s6 run script and attach my process to supervision."

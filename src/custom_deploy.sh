@@ -28,6 +28,8 @@ MEMORY=""                # 内存限制（例如：4g 或 2048m）
 
 # 脚本资源路径
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+PROJECT_SKILLS_DIR="$PROJECT_ROOT/skills"
 WORKSPACE_WELCOME_DOC="$SCRIPT_DIR/workspace_welcome.md"
 
 # ============================================================
@@ -110,12 +112,14 @@ BASHRC_EXTRA_DIR="$DATA_DIR/.bashrc.extra"
 CLAUDE_DIR="$DATA_DIR/ai-configs/.claude"
 CLAUDE_JSON_DIR="$DATA_DIR/ai-configs/.claude.json"
 CODEX_DIR="$DATA_DIR/ai-configs/.codex"
+CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
+CODEX_SKILLS_DIR="$CODEX_DIR/skills"
 VSCODE_SERVER_DIR="$DATA_DIR/.vscode-server"
 WORKSPACE_DIR="$DATA_DIR/workspace"
 S6_SERVICES_DIR="$DATA_DIR/s6-services"
 
 # 3. 创建所有必要目录
-mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR" \
+mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$CLAUDE_SKILLS_DIR" "$CODEX_SKILLS_DIR" "$VSCODE_SERVER_DIR" \
     "$S6_SERVICES_DIR/user/contents.d" "$S6_SERVICES_DIR/user2/contents.d"
 
 [[ ! -f "$S6_SERVICES_DIR/user/type" ]] && printf 'bundle\n' > "$S6_SERVICES_DIR/user/type"
@@ -126,11 +130,27 @@ mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$VSCODE_SERVER_DIR" \
 [[ ! -f "$BASHRC_EXTRA_DIR" ]] && { [[ -d "$BASHRC_EXTRA_DIR" ]] && rm -rf "$BASHRC_EXTRA_DIR"; touch "$BASHRC_EXTRA_DIR"; }
 [[ ! -f "$CLAUDE_JSON_DIR" ]] && { [[ -d "$CLAUDE_JSON_DIR" ]] && rm -rf "$CLAUDE_JSON_DIR"; echo '{"hasCompletedOnboarding": true}' > "$CLAUDE_JSON_DIR"; }
 
+sync_project_skills() {
+    local target_dir="$1"
+
+    if [[ ! -d "$PROJECT_SKILLS_DIR" ]]; then
+        echo "❌ 项目 skills 目录不存在: $PROJECT_SKILLS_DIR"
+        exit 1
+    fi
+
+    mkdir -p "$target_dir"
+    cp -R "$PROJECT_SKILLS_DIR"/. "$target_dir"/
+}
+
+# 4. 同步项目技能到各 Agent 配置目录
+sync_project_skills "$CLAUDE_SKILLS_DIR"
+sync_project_skills "$CODEX_SKILLS_DIR"
+
 # 注意：文件权限由容器 entrypoint.sh 统一处理
 # - mkdir 创建的目录自动归属当前用户，通常无需手动修正
 # - 容器启动时，entrypoint.sh 会根据 HOST_UID/GID 自动调整所有挂载目录的权限
 
-# 4. 初始化工作区欢迎文档
+# 5. 初始化工作区欢迎文档
 if [[ ! -f "$WORKSPACE_WELCOME_DOC" ]]; then
     echo "❌ 工作区欢迎文档不存在: $WORKSPACE_WELCOME_DOC"
     exit 1
