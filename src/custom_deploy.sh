@@ -132,6 +132,12 @@ mkdir -p "$WORKSPACE_DIR" "$CLAUDE_DIR" "$CODEX_DIR" "$CLAUDE_SKILLS_DIR" "$CODE
 
 sync_project_skills() {
     local target_dir="$1"
+    local source_skill source_name target_skill
+
+    if [[ -z "$target_dir" || "$target_dir" == "/" ]]; then
+        echo "❌ 技能同步目标目录非法: $target_dir"
+        exit 1
+    fi
 
     if [[ ! -d "$PROJECT_SKILLS_DIR" ]]; then
         echo "❌ 项目 skills 目录不存在: $PROJECT_SKILLS_DIR"
@@ -139,7 +145,15 @@ sync_project_skills() {
     fi
 
     mkdir -p "$target_dir"
-    cp -R "$PROJECT_SKILLS_DIR"/. "$target_dir"/
+    for source_skill in "$PROJECT_SKILLS_DIR"/*; do
+        [[ -d "$source_skill" ]] || continue
+
+        source_name="$(basename "$source_skill")"
+        target_skill="$target_dir/$source_name"
+
+        [[ -e "$target_skill" || -L "$target_skill" ]] && rm -rf -- "$target_skill"
+        cp -R "$source_skill" "$target_skill"
+    done
 }
 
 # 4. 同步项目技能到各 Agent 配置目录
