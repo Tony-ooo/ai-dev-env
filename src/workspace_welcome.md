@@ -9,10 +9,10 @@
 ## 预装工具 (常见版本)
 | 工具 | 版本 | 说明 |
 |------|------|------|
-| Ubuntu | 22.04 LTS | 基础镜像 |
+| Ubuntu | 24.04 LTS | 基础镜像 |
 | Bash | 5.x | 默认 Shell |
 | OpenSSH Server | 最新 | 方便远程 SSH 登录 |
-| **Node.js** | 22.x | 由 NodeSource 仓库安装 |
+| **Node.js** | 24.x | 由 NodeSource 仓库安装 |
 | **Python** | 系统默认版本 | 默认使用系统自带 `python`/`python3`，Miniconda 可按需手动激活 |
 | **uv** | 最新 | Rust 实现的极速 Python 包管理器 |
 | Git / Vim / curl / build-essential | 最新 | 常用开发工具 |

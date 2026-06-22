@@ -2,12 +2,12 @@
 
 echo "============================================"
 echo "Starting Docker image build process..."
-echo "Image: tonyooo/ai-dev-env:5.0-arm64"
+echo "Image: tonyooo/ai-dev-env:5.1-arm64"
 echo "============================================"
 
 # 构建 Docker 镜像
 docker build \
-  -t tonyooo/ai-dev-env:5.0-arm64 ../src
+  -t tonyooo/ai-dev-env:5.1-arm64 ../src
 BUILD_STATUS=$?
 
 echo

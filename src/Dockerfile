@@ -1,10 +1,10 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG TARGETARCH
 ARG HOST_UID=1000
 ARG HOST_GID=1000
-ARG MINICONDA_VERSION=py310_23.5.2-0
-ARG NODE_VERSION=22
+ARG MINICONDA_VERSION=py312_26.3.2-2
+ARG NODE_VERSION=24
 ARG S6_OVERLAY_VERSION=3.2.3.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -59,14 +59,18 @@ RUN set -eux \
     # 禁止 SSH 接收客户端 locale，避免本地 LANG/LC_* 污染容器
     && sed -i '/^[[:space:]]*AcceptEnv[[:space:]]\+/d' /etc/ssh/sshd_config \
     && printf '\nSetEnv LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8\n' >> /etc/ssh/sshd_config \
-    # 创建用户和组 (处理 ID 冲突逻辑)
-    && (groupadd -g "$HOST_GID" dev || groupmod -g "$HOST_GID" dev) \
+    # 创建用户和组 (处理 Ubuntu 24.04 默认 ubuntu 用户占用 1000:1000 的情况)
+    && existing_user="$(getent passwd "$HOST_UID" | cut -d: -f1 || true)" \
+    && if [ -n "$existing_user" ] && [ "$existing_user" != "dev" ]; then userdel -r "$existing_user"; fi \
+    && existing_group="$(getent group "$HOST_GID" | cut -d: -f1 || true)" \
+    && if [ -n "$existing_group" ] && [ "$existing_group" != "dev" ]; then groupdel "$existing_group"; fi \
+    && groupadd -g "$HOST_GID" dev \
     && useradd -m -s /bin/bash -u "$HOST_UID" -g "$HOST_GID" dev \
     && usermod -aG sudo dev \
     && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && echo "set -g mouse on" > /home/dev/.tmux.conf \
     && chown dev:dev /home/dev/.tmux.conf \
-    # 安装 Node.js 22.x
+    # 安装 Node.js
     && retry curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" -o /tmp/nodesource_setup.sh \
     && retry bash /tmp/nodesource_setup.sh \
     && retry apt-get update \
@@ -127,7 +131,7 @@ RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
     && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
-    && npm install -g pm2@latest @anthropic-ai/claude-code@latest @openai/codex@latest \
+    && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest \
     && npm cache clean --force
     
 # --- 切回 root 配置 s6 初始化脚本 ---

@@ -13,7 +13,7 @@
 
 echo "=================================================="
 echo "Starting Docker image deployment process..."
-echo "Image: tonyooo/ai-dev-env:5.0-amd64"
+echo "Image: tonyooo/ai-dev-env:5.1-amd64"
 echo "GPU: auto-detect"
 echo "=================================================="
 
@@ -24,7 +24,7 @@ BIND_ADDRESS=127.0.0.1
 
 # 自定义参数
 BASE_DATA_DIR="D:/xxx/user-data"
-IMAGE_NAME="tonyooo/ai-dev-env:5.0-amd64"
+IMAGE_NAME="tonyooo/ai-dev-env:5.1-amd64"
 
 # 执行部署脚本，GPU 自动检测
 bash --login -c "../src/custom_deploy.sh \
