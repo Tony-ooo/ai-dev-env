@@ -66,53 +66,31 @@ sed -i "s/^#\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config
 echo "✅ SSH 已配置: 端口 $SSH_PORT"
 
 # ============================================================
-# 第四步：修正 /home/dev 目录权限
+# 第四步：修正必要的 /home/dev 配置权限
 # ============================================================
-# 自动探测 /home/dev 下需要修复权限的路径（不再硬编码关键目录）
-echo "🔧 修正 /home/dev 权限..."
+# 仅修复登录和工具配置真正需要写入的路径，避免递归扫描大型 workspace。
+echo "🔧 修正 /home/dev 配置权限..."
 CHOWN_START=$SECONDS
 CHOWN_EXIT=0
 
 if (
     chown dev:dev /home/dev 2>/dev/null || true
-    CHOWN_TARGETS=()
 
-    # 1) 自动收集挂载到 /home/dev 下的卷/绑定路径
-    if [ -r /proc/self/mountinfo ]; then
-        while IFS= read -r mount_target; do
-            [ -n "$mount_target" ] && CHOWN_TARGETS+=("$mount_target")
-        done < <(awk '$5 ~ /^\/home\/dev(\/|$)/ {print $5}' /proc/self/mountinfo 2>/dev/null | sort -u)
-    fi
-
-    # 2) 自动扫描 root 所有权路径（默认 3 层，避免全量深度扫描）
-    CHOWN_SCAN_DEPTH=${CHOWN_SCAN_DEPTH:-3}
-    case "$CHOWN_SCAN_DEPTH" in
-        ''|*[!0-9]*) CHOWN_SCAN_DEPTH=3 ;;
-    esac
-    if [ "$CHOWN_SCAN_DEPTH" -le 0 ]; then
-        CHOWN_SCAN_DEPTH=3
-    fi
-
-    while IFS= read -r detected_target; do
-        CHOWN_TARGETS+=("$detected_target")
-    done < <(find /home/dev -mindepth 1 -maxdepth "$CHOWN_SCAN_DEPTH" \( -uid 0 -o -gid 0 \) -print 2>/dev/null || true)
-
-    declare -A CHOWN_SEEN=()
-    for target in "${CHOWN_TARGETS[@]}"; do
-        if [ -n "${CHOWN_SEEN[$target]+x}" ]; then
-            continue
-        fi
-        CHOWN_SEEN["$target"]=1
-
-        if [ -e "$target" ] || [ -L "$target" ]; then
-            if [ -d "$target" ] && [ ! -L "$target" ]; then
-                # 优先只修 root:root，兼容旧版本 chown 再兜底全量修复
-                chown --from=0:0 -R dev:dev "$target" 2>/dev/null || chown -R dev:dev "$target" 2>/dev/null || true
-            else
-                chown dev:dev "$target" 2>/dev/null || true
-            fi
+    for file_path in /home/dev/.sudo_as_admin_successful /home/dev/.bashrc.extra /home/dev/.claude.json; do
+        if [ -e "$file_path" ] || [ -L "$file_path" ]; then
+            chown dev:dev "$file_path" 2>/dev/null || true
         fi
     done
+
+    for config_dir in /home/dev/.claude /home/dev/.codex; do
+        if [ -d "$config_dir" ] && [ ! -L "$config_dir" ]; then
+            chown --from=0:0 -R dev:dev "$config_dir" 2>/dev/null || chown -R dev:dev "$config_dir" 2>/dev/null || true
+        fi
+    done
+
+    if [ -d /home/dev/.vscode-server ] && [ ! -L /home/dev/.vscode-server ] && ! sudo -u dev test -w /home/dev/.vscode-server; then
+        chown --from=0:0 -R dev:dev /home/dev/.vscode-server 2>/dev/null || chown -R dev:dev /home/dev/.vscode-server 2>/dev/null || true
+    fi
 ); then
     CHOWN_EXIT=0
 else
@@ -122,9 +100,9 @@ fi
 CHOWN_COST=$((SECONDS - CHOWN_START))
 
 if [ "$CHOWN_EXIT" -eq 0 ]; then
-    echo "✅ /home/dev 权限已修正 (${CHOWN_COST}s)"
+    echo "✅ /home/dev 配置权限已修正 (${CHOWN_COST}s)"
 else
-    echo "⚠️ /home/dev 权限修正部分失败（退出码: $CHOWN_EXIT），继续启动"
+    echo "⚠️ /home/dev 配置权限修正部分失败（退出码: $CHOWN_EXIT），继续启动"
 fi
 
 echo "🔍 校验 SSH 服务配置（端口: $SSH_PORT）..."

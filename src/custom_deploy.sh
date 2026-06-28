@@ -160,9 +160,9 @@ sync_project_skills() {
 sync_project_skills "$CLAUDE_SKILLS_DIR"
 sync_project_skills "$CODEX_SKILLS_DIR"
 
-# 注意：文件权限由容器 entrypoint.sh 统一处理
+# 注意：容器 entrypoint.sh 仅修复必要的配置路径权限，避免递归扫描大型 workspace。
 # - mkdir 创建的目录自动归属当前用户，通常无需手动修正
-# - 容器启动时，entrypoint.sh 会根据 HOST_UID/GID 自动调整所有挂载目录的权限
+# - workspace 权限应由宿主机目录所有者/UID 映射保证，不在容器启动时递归 chown
 
 # 5. 初始化工作区欢迎文档
 if [[ ! -f "$WORKSPACE_WELCOME_DOC" ]]; then

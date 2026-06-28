@@ -130,7 +130,13 @@ RUN ARCH=$(uname -m) \
 RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc \
-    && echo '[ -s "/home/dev/.bashrc.extra" ] && . "/home/dev/.bashrc.extra"' >> ~/.bashrc \
+    && printf '%s\n' \
+        '' \
+        '# Source Windows-mounted custom settings after normalizing CRLF endings.' \
+        'if [ -s "$HOME/.bashrc.extra" ]; then' \
+        '    . <(sed '"'"'s/\r$//'"'"' "$HOME/.bashrc.extra")' \
+        'fi' \
+       >> ~/.bashrc \
     && npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest \
     && npm cache clean --force
     
