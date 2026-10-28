@@ -126,6 +126,36 @@ class BuildVersionTest(unittest.TestCase):
         tags = [a[a.index("-t") + 1] for a in self.calls() if a[0] == "build"]
         self.assertEqual(tags, ["fixture/dev:0.1.7"])
 
+    def test_git_uses_converted_host_path_when_path_conversion_is_disabled(self):
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)
+        cygpath = self.bin / "cygpath"
+        cygpath.write_text(
+            '#!/usr/bin/env python3\nimport os, sys\n'
+            'path = sys.argv[2]\n'
+            'root = os.environ["IMAGE_TEST_REAL_ROOT"]\n'
+            'assert sys.argv[1] == "-m" and (path == root or path.startswith(root + "/"))\n'
+            'print(os.environ["IMAGE_TEST_HOST_ROOT"] + path[len(root):])\n', encoding="utf-8")
+        cygpath.chmod(0o755)
+        git = self.bin / "git"
+        git.write_text(
+            '#!/usr/bin/env python3\nimport json, os, sys\n'
+            'args = sys.argv[1:]\n'
+            'if args[:1] == ["-C"]:\n'
+            '    assert os.environ.get("MSYS_NO_PATHCONV") == "1"\n'
+            '    assert args[1] == os.environ["IMAGE_TEST_HOST_ROOT"], args[1]\n'
+            '    with open(os.environ["IMAGE_TEST_LOG"], "a", encoding="utf-8") as out:\n'
+            '        out.write(json.dumps(["git", *args]) + "\\n")\n'
+            '    args[1] = os.environ["IMAGE_TEST_REAL_ROOT"]\n'
+            f'os.execv({real_git!r}, [{real_git!r}, *args])\n', encoding="utf-8")
+        git.chmod(0o755)
+        result = self.run_build("--with-browser", "--push", IMAGE_TEST_REAL_ROOT=str(self.repo),
+                                IMAGE_TEST_HOST_ROOT="Z:/converted repository")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        git_calls = [a for a in self.calls() if a[0] == "git"]
+        self.assertGreaterEqual(len(git_calls), 5)
+        self.assertTrue(all(a[1:3] == ["-C", "Z:/converted repository"] for a in git_calls))
+
     def test_first_commit_can_be_released_with_automatic_root(self):
         self.git("checkout", "--detach", self.base)
         self.git("push", "--force", "origin", self.base + ":main")

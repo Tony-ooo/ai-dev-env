@@ -13,6 +13,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # Converting explicitly keeps the result independent of the caller's setting.
 . "$ROOT/scripts/lib.sh"
 
+# Git for Windows also needs this host path while MSYS_NO_PATHCONV is set.
 BUILD_CONTEXT=$(host_path "$ROOT")
 BUILD_FILE=$(host_path "$ROOT/Dockerfile")
 
@@ -79,10 +80,10 @@ image_release_state() {
 
 check_release_source() {
     local status remote_info remote_revision history
-    status=$(git -C "$ROOT" status --porcelain --untracked-files=normal) \
+    status=$(git -C "$BUILD_CONTEXT" status --porcelain --untracked-files=normal) \
         || die 'cannot inspect the Git working tree'
     [ -z "$status" ] || die 'image releases require a clean Git working tree'
-    remote_info=$(git -C "$ROOT" ls-remote --heads "$IMAGE_GIT_REMOTE" refs/heads/main 2>/dev/null) \
+    remote_info=$(git -C "$BUILD_CONTEXT" ls-remote --heads "$IMAGE_GIT_REMOTE" refs/heads/main 2>/dev/null) \
         || die 'cannot read the remote main branch'
     remote_revision=${remote_info%%$'\t'*}
     [ -n "$remote_revision" ] || die 'remote main branch was not found'
@@ -90,9 +91,9 @@ check_release_source() {
     if [ "$remote_revision" = "$REVISION" ]; then
         IS_LATEST=1
     else
-        git -C "$ROOT" cat-file -e "${remote_revision}^{commit}" 2>/dev/null \
+        git -C "$BUILD_CONTEXT" cat-file -e "${remote_revision}^{commit}" 2>/dev/null \
             || die 'fetch remote main before releasing an earlier commit'
-        history=$(git -C "$ROOT" rev-list --first-parent "$remote_revision") \
+        history=$(git -C "$BUILD_CONTEXT" rev-list --first-parent "$remote_revision") \
             || die 'cannot inspect remote main commit history'
         grep -Fxq "$REVISION" <<< "$history" \
             || die 'image releases require a commit on remote main first-parent history'
@@ -110,21 +111,21 @@ reserve_version() {
         VERSION_LOCK=""
         die 'another image release is running, or its lock needs inspection'
     fi
-    REVISION=$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}') \
+    REVISION=$(git -C "$BUILD_CONTEXT" rev-parse --verify 'HEAD^{commit}') \
         || die 'cannot determine the current Git commit'
     check_release_source
-    [ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" = false ] \
+    [ "$(git -C "$BUILD_CONTEXT" rev-parse --is-shallow-repository)" = false ] \
         || die 'image releases require a complete Git history (fetch --unshallow)'
     if [ "$RELEASE_BASE" = @root ]; then
-        patch=$(git -C "$ROOT" rev-list --first-parent --count "$REVISION") \
+        patch=$(git -C "$BUILD_CONTEXT" rev-list --first-parent --count "$REVISION") \
             || die 'cannot calculate image version'
     else
-        base=$(git -C "$ROOT" rev-parse --verify "${RELEASE_BASE}^{commit}") \
+        base=$(git -C "$BUILD_CONTEXT" rev-parse --verify "${RELEASE_BASE}^{commit}") \
             || die 'release base is not present in this checkout'
-        history=$(git -C "$ROOT" rev-list --first-parent "$REVISION") \
+        history=$(git -C "$BUILD_CONTEXT" rev-list --first-parent "$REVISION") \
             || die 'cannot inspect main commit history'
         grep -Fxq "$base" <<< "$history" || die 'release base is not on the main first-parent history'
-        patch=$(git -C "$ROOT" rev-list --first-parent --count "$base..$REVISION") \
+        patch=$(git -C "$BUILD_CONTEXT" rev-list --first-parent --count "$base..$REVISION") \
             || die 'cannot calculate image version'
     fi
     [[ "$patch" =~ ^[1-9][0-9]{0,8}$ ]] || die 'the current commit must follow the release base'
