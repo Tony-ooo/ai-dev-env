@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+"""ai-browser: operate the per-user browser computer from the dev container.
+
+Two channels, same visible Chromium tab:
+
+  text   page-browser (CDP): open / navigate / snapshot / act
+  pixels desktop control API: click / type / key / scroll / shot
+
+Environment is injected by scripts/deploy.sh, or read from
+~/.ai-data/browser/state/env when the browser is started after the container:
+
+  BROWSER_HOST            container name of the browser computer
+  BROWSER_CONTROL_PORT    default 7070
+  BROWSER_CDP_PORT        default 9223 (CDP gate)
+  BROWSER_CONTROL_TOKEN   optional; otherwise read from the data volume
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+STATE_DIR = Path("/home/dev/.ai-data/browser/state")
+ENV_FILE = STATE_DIR / "env"
+TOKEN_FILE = Path(os.environ.get("BROWSER_TOKEN_FILE", str(STATE_DIR / "token")))
+PAGE_BROWSER = "/usr/local/bin/page-browser"
+TIMEOUT = float(os.environ.get("BROWSER_TIMEOUT", "90"))
+# Action batches are bounded to 180 seconds by control.py; leave time for the
+# hub to wake the desktop before the action begins.
+ACTION_TIMEOUT = float(os.environ.get("BROWSER_TIMEOUT", "300"))
+
+
+class Failure(RuntimeError):
+    def __init__(self, message: str, payload: dict | None = None):
+        super().__init__(message)
+        self.payload = payload
+
+
+def load_env_file() -> None:
+    """Allow a browser computer started after the dev container to be discovered."""
+    try:
+        text = ENV_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not key or not value:
+            continue
+        # An empty exported variable must not shadow the file (e.g. `BROWSER_HOST=`).
+        if not os.environ.get(key):
+            os.environ[key] = value
+
+
+def control_port() -> int:
+    return int(os.environ.get("BROWSER_CONTROL_PORT", "7070"))
+
+
+def cdp_port() -> int:
+    return int(os.environ.get("BROWSER_CDP_PORT", "9223"))
+
+
+def host() -> str:
+    value = os.environ.get("BROWSER_HOST", "").strip()
+    if not value:
+        raise Failure(
+            "BROWSER_HOST is not set: the browser computer address is not configured. "
+            "Ask the Docker host administrator to check browser setup and container configuration."
+        )
+    return value
+
+
+def token() -> str:
+    value = os.environ.get("BROWSER_CONTROL_TOKEN", "").strip()
+    if value:
+        return value
+    try:
+        return TOKEN_FILE.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise Failure(
+            f"cannot read control token ({error}); check browser setup and token file permissions"
+        ) from error
+
+
+def request(method: str, path: str, payload: dict | None = None, raw: bool = False):
+    url = f"http://{host()}:{control_port()}{path}"
+    body = None
+    headers = {"Authorization": f"Bearer {token()}"}
+    if payload is not None:
+        body = json.dumps(payload).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        timeout = ACTION_TIMEOUT if path == "/v1/actions" else TIMEOUT
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            return data if raw else json.loads(data or b"{}")
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+        try:
+            payload = json.loads(detail)
+        except json.JSONDecodeError:
+            payload = None
+        raise Failure(f"{method} {path} -> HTTP {error.code}: {detail}",
+                      payload if isinstance(payload, dict) else None) from error
+    except urllib.error.URLError as error:
+        raise Failure(
+            f"cannot reach browser computer at {host()}:{control_port()} ({error.reason}). "
+            "Ask the Docker host administrator to check the browser container and network."
+        ) from error
+
+
+def page_browser(command: str, payload: dict | None = None) -> dict:
+    # A sleeping computer answers HTTP through the hub, but Chromium is only
+    # started by the control API; without this the first snapshot after idle fails.
+    request("POST", "/v1/ensure", {})
+    env = {
+        **os.environ,
+        "BROWSER_CDP_HOST": host(),
+        "BROWSER_CDP_PORT": str(cdp_port()),
+        "HOME": os.environ.get("HOME", "/home/dev"),
+    }
+    args = [sys.executable, PAGE_BROWSER, command]
+    if payload is not None:
+        args.append(json.dumps(payload))
+    result = subprocess.run(args, capture_output=True, text=True, env=env, timeout=TIMEOUT)
+    out = (result.stdout or "").strip()
+    if not out:
+        raise Failure(result.stderr.strip() or f"page-browser {command} returned nothing")
+    try:
+        return json.loads(out.splitlines()[-1])
+    except json.JSONDecodeError as error:
+        raise Failure(f"page-browser returned non-JSON: {out[:400]}") from error
+
+
+def emit(payload: dict, code: int = 0) -> int:
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return code
+
+
+def hub_status() -> dict:
+    """Hub state; does NOT wake the desktop stack."""
+    url = f"http://{host()}:{control_port()}/__hub/status"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            return json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as error:
+        if error.code == 503:
+            return json.loads(error.read())
+        raise Failure(f"hub status failed: HTTP {error.code}") from error
+    except Exception as error:  # noqa: BLE001
+        raise Failure(
+            f"cannot reach browser computer at {host()}:{control_port()} ({error}). "
+            "Ask the Docker host administrator to check the browser container and network."
+        ) from error
+
+
+def cmd_status() -> int:
+    hub = hub_status()
+    if not hub.get("ok", True):
+        return emit({"ok": False, "host": host(), "state": "degraded", "hub": hub}, 1)
+    if hub.get("state") in ("starting", "stopping"):
+        return emit({"ok": True, "host": host(), "state": hub["state"],
+                     "detail": "desktop transition in progress; status polling is passive", "hub": hub})
+    if not hub.get("stack"):
+        return emit({
+            "ok": True,
+            "host": host(),
+            "state": "idle",
+            "detail": "desktop stack is stopped; the next operation wakes it",
+            "hub": hub,
+        })
+    # Only the hub status route is passive. Querying control or CDP through the
+    # proxy would refresh LAST_ACTIVE and prevent a polled browser from sleeping.
+    chromium = bool(hub.get("chromium"))
+    health = {"ok": True, "display": hub.get("display"),
+              "chromium": chromium, "profile": hub.get("profile")}
+    cdp = {"ok": chromium}
+    if not chromium:
+        cdp["error"] = "Chromium not started yet (open/ensure starts it)"
+    return emit({"ok": True, "host": host(), "state": "awake", "control": health,
+                 "cdp": cdp, "hub": hub})
+
+
+def cmd_ensure() -> int:
+    return emit({"ok": True, **request("POST", "/v1/ensure", {})})
+
+
+def cdp_json(path: str, method: str = "GET"):
+    req = urllib.request.Request(f"http://{host()}:{cdp_port()}{path}", method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read()
+    except Exception as error:  # noqa: BLE001
+        raise Failure(f"CDP {method} {path} failed: {error}") from error
+    try:
+        return json.loads(body or b"null")
+    except json.JSONDecodeError:
+        return None
+
+
+def pages() -> list[dict]:
+    listing = cdp_json("/json/list") or []
+    return [page for page in listing if page.get("type") == "page"]
+
+
+def cmd_open(url: str) -> int:
+    if not url:
+        raise Failure("usage: ai-browser open <url>")
+    request("POST", "/v1/ensure", {})
+    target = url.rstrip("/")
+    # Reuse an existing tab instead of piling up one tab per open call; a large
+    # restored session is what makes the first command after idle slow.
+    for page in pages():
+        if str(page.get("url", "")).rstrip("/") == target:
+            cdp_json(f"/json/activate/{page['id']}")
+            return emit({"ok": True, "url": url, "reused": True, "id": page["id"]})
+    created = cdp_json(f"/json/new?{urllib.parse.quote(url, safe='')}", "PUT")
+    return emit({"ok": True, "url": url, "reused": False, "target": created})
+
+
+def cmd_tabs() -> int:
+    request("POST", "/v1/ensure", {})
+    current = pages()
+    return emit({
+        "ok": True,
+        "count": len(current),
+        "tabs": [
+            {"id": page.get("id"), "url": page.get("url"), "title": page.get("title")}
+            for page in current
+        ],
+    })
+
+
+def cmd_close(selector: str) -> int:
+    if not selector:
+        raise Failure("usage: ai-browser close <tab-id|all>")
+    request("POST", "/v1/ensure", {})
+    current = pages()
+    if not current:
+        return emit({"ok": True, "closed": 0})
+    if selector == "all":
+        # Keep one tab: closing the last one exits Chromium and drops CDP.
+        keep = current[0]
+        cdp_json(f"/json/activate/{keep['id']}")
+        closed = 0
+        for page in current[1:]:
+            cdp_json(f"/json/close/{page['id']}")
+            closed += 1
+        return emit({"ok": True, "closed": closed, "kept": keep.get("url")})
+    cdp_json(f"/json/close/{selector}")
+    return emit({"ok": True, "closed": 1, "id": selector})
+
+
+def cmd_snapshot() -> int:
+    return emit(page_browser("snapshot"))
+
+
+def cmd_navigate(url: str) -> int:
+    if not url:
+        raise Failure("usage: ai-browser navigate <url>")
+    return emit(page_browser("navigate", {"url": url}))
+
+
+def cmd_act(raw: str) -> int:
+    if not raw:
+        raise Failure("usage: ai-browser act '<json actions>'")
+    try:
+        actions = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise Failure(f"actions must be JSON: {error}") from error
+    if isinstance(actions, dict):
+        actions = actions.get("actions", [])
+    return emit(page_browser("act", {"actions": actions}))
+
+
+def cmd_actions(actions: list[dict]) -> int:
+    return emit({"ok": True, **request("POST", "/v1/actions", {"actions": actions})})
+
+
+def cmd_shot(path: str) -> int:
+    data = request("GET", "/v1/screenshot", raw=True)
+    target = Path(path or "screen.png").expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return emit({"ok": True, "path": str(target), "bytes": len(data)})
+
+
+def cmd_screen() -> int:
+    ssh_port = os.environ.get("BROWSER_SSH_PORT", "") or "<SSH_PORT>"
+    credential_path = shlex.quote(str(STATE_DIR / "screen-auth"))
+    return emit({
+        "ok": True,
+        "tunnel": (f"ssh -T -o ExitOnForwardFailure=yes -p {ssh_port} "
+                   f"-L 127.0.0.1:6080:{host()}:6080 dev@<host> "
+                   '"echo SSH connected. Open the live view to check the tunnel.; exec sleep infinity"'),
+        "url_after_tunnel": "http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true",
+        "credential_command": f"cat {credential_path}; printf '\\n'",
+        "password_hint": "Run credential_command yourself in the dev container terminal; do not share its output in chat.",
+    })
+
+
+def usage(code: int = 2) -> int:
+    print(
+        "usage: ai-browser <command>\n\n"
+        "  status | ensure\n"
+        "  open <url> (reuses the tab for the same URL) | navigate <url>\n"
+        "  tabs | close <tab-id|all>\n"
+        "  snapshot | act '<json>'\n"
+        "  click <x> <y> [count] | type <text> | type-keys <text> | key <combo>\n"
+        "  scroll <up|down|left|right> [steps] [x] [y]\n"
+        "  shot [-o file] | screen"
+    )
+    return code
+
+
+def main(argv: list[str]) -> int:
+    load_env_file()
+    if len(argv) < 2:
+        return usage()
+    command, rest = argv[1], argv[2:]
+    try:
+        if command in ("-h", "--help"):
+            return usage(0)
+        if command == "status":
+            return cmd_status()
+        if command == "ensure":
+            return cmd_ensure()
+        if command == "open":
+            return cmd_open(rest[0] if rest else "")
+        if command == "tabs":
+            return cmd_tabs()
+        if command == "close":
+            return cmd_close(rest[0] if rest else "")
+        if command == "navigate":
+            return cmd_navigate(rest[0] if rest else "")
+        if command == "snapshot":
+            return cmd_snapshot()
+        if command == "act":
+            return cmd_act(rest[0] if rest else "")
+        if command == "click":
+            if len(rest) < 2:
+                raise Failure("usage: ai-browser click <x> <y> [count]")
+            action = {"type": "click", "x": int(rest[0]), "y": int(rest[1])}
+            if len(rest) > 2:
+                action["count"] = int(rest[2])
+            return cmd_actions([action])
+        if command in ("type", "type-keys"):
+            if not rest:
+                raise Failure(f"usage: ai-browser {command} <text>")
+            action = {"type": "type", "text": " ".join(rest)}
+            if command == "type-keys":
+                action["method"] = "keys"
+            return cmd_actions([action])
+        if command == "key":
+            if not rest:
+                raise Failure("usage: ai-browser key <combo>")
+            return cmd_actions([{"type": "key", "key": rest[0]}])
+        if command == "scroll":
+            if not rest:
+                raise Failure("usage: ai-browser scroll <up|down|left|right> [steps] [x] [y]")
+            action = {"type": "scroll", "direction": rest[0]}
+            if len(rest) > 1:
+                action["steps"] = int(rest[1])
+            if len(rest) > 3:
+                action["x"], action["y"] = int(rest[2]), int(rest[3])
+            return cmd_actions([action])
+        if command == "shot":
+            path = ""
+            if len(rest) >= 2 and rest[0] == "-o":
+                path = rest[1]
+            return cmd_shot(path)
+        if command == "screen":
+            return cmd_screen()
+        return usage()
+    except Failure as error:
+        payload = error.payload or {
+            "error": str(error), "uncertain": command in ("act", "click", "type", "type-keys", "key", "scroll")}
+        return emit({**payload, "ok": False}, 1)
+    except (ValueError, OSError) as error:
+        return emit({"ok": False, "error": str(error),
+                     "uncertain": isinstance(error, OSError) and command in ("act", "click", "type", "type-keys", "key", "scroll")}, 1)
+    except subprocess.TimeoutExpired:
+        return emit({"ok": False, "error": "browser operation timed out",
+                     "uncertain": command in ("act", "click", "type", "type-keys", "key", "scroll")}, 1)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

@@ -1,0 +1,10 @@
+session.screen0.toolbar.visible:	false
+session.screen0.fullMaximization:	true
+session.screen0.defaultDeco:		NORMAL
+session.screen0.focusNewWindows:	true
+session.screen0.workspaces:		1
+session.screen0.workspaceNames:		main
+session.styleFile:			/usr/share/fluxbox/styles/bloe
+session.screen0.window.focus.alpha:	255
+session.screen0.window.unfocused.alpha:	255
+session.screen0.rootCommand:		xsetroot -solid "#111113"

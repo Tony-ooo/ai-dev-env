@@ -1,0 +1,35 @@
+# Build-time dependency manifest: slow or flaky upstream downloads.
+#
+# scripts/vendor.sh downloads these into vendor/blobs/ using this file as the
+# only source of versions and checksums. The Dockerfile installs from the local
+# copies when present and falls back to the network otherwise, so builds work
+# offline once the blobs exist.
+#
+# Format: <sha256>  <file name>  <url>  <arch>
+#   arch is one of: amd64 | arm64 | any
+#   "any" marks a payload with no architecture-specific binary: pure scripts or
+#   wrappers (the npm launcher packages, the s6-overlay noarch archive). It is
+#   architecture-independent, NOT a payload containing builds for every arch;
+#   the real binaries live in the matching amd64/arm64 records.
+#   Everything not marked "any" is downloaded only for the architecture in use.
+# Checksums come from the upstream release/repository metadata, not from the
+# downloaded file, so a corrupted or substituted download is rejected.
+
+# --- npm payloads: launcher wrappers (arch-independent) plus per-platform binaries ---
+7bbcaf79930440d62daa309ae4fea63ba3df998dd6736b8d1c9a5767bf0bc7c1  claude-code-2.1.312.tgz  https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.312.tgz  any
+f1c3d923ff3ac7e7080b8b9c638833dde72feab15e46940a65a0122d728c6bfd  claude-code-linux-x64-2.1.312.tgz  https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.312.tgz  amd64
+3aa8e624d35e8a77a851e7009b83ae95d3168f24f1afdb0a1ed580a2313d9e5c  claude-code-linux-arm64-2.1.312.tgz  https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64/-/claude-code-linux-arm64-2.1.312.tgz  arm64
+cb890818146db2401af6962bd1c2b4cb72a1b2b5df99f10ff2b36ae3d1c37f45  codex-0.165.0.tgz  https://registry.npmjs.org/@openai/codex/-/codex-0.165.0.tgz  any
+f997cd6ef5987126e19cd3c82e847a4a6461270f32f97340c5e99a65fb6f9b8a  codex-0.165.0-linux-x64.tgz  https://registry.npmjs.org/@openai/codex/-/codex-0.165.0-linux-x64.tgz  amd64
+c9955808e3598198afe1b8525b5864c0e3f2477339d26e91924e95ed45473baf  codex-0.165.0-linux-arm64.tgz  https://registry.npmjs.org/@openai/codex/-/codex-0.165.0-linux-arm64.tgz  arm64
+
+# --- single-binary tools ---
+14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d  herdr-linux-x86_64-v0.9.5  https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-linux-x86_64  amd64
+17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c  herdr-linux-aarch64-v0.9.5  https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-linux-aarch64  arm64
+f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f  uv-x86_64-unknown-linux-gnu-0.13.5.tar.gz  https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz  amd64
+4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403  uv-aarch64-unknown-linux-gnu-0.13.5.tar.gz  https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-unknown-linux-gnu.tar.gz  arm64
+
+# --- s6-overlay: the noarch archive holds scripts only; the binaries are per platform ---
+b720f9d9340efc8bb07528b9743813c836e4b02f8693d90241f047998b4c53cf  s6-overlay-noarch-v3.2.3.0.tar.xz  https://github.com/just-containers/s6-overlay/releases/download/v3.2.3.0/s6-overlay-noarch.tar.xz  any
+a93f02882c6ed46b21e7adb5c0add86154f01236c93cd82c7d682722e8840563  s6-overlay-x86_64-v3.2.3.0.tar.xz  https://github.com/just-containers/s6-overlay/releases/download/v3.2.3.0/s6-overlay-x86_64.tar.xz  amd64
+0952056ff913482163cc30e35b2e944b507ba1025d78f5becbb89367bf344581  s6-overlay-aarch64-v3.2.3.0.tar.xz  https://github.com/just-containers/s6-overlay/releases/download/v3.2.3.0/s6-overlay-aarch64.tar.xz  arm64

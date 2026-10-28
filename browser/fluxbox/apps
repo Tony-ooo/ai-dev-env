@@ -1,0 +1,8 @@
+[startup] {xsetroot -solid "#111113"}
+[app] (name=chromium) (class=Chromium)
+  [Maximized] {yes}
+  [Deco] {NORMAL}
+[end]
+[app] (name=Chromium) (class=Chromium)
+  [Maximized] {yes}
+[end]

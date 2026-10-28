@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+README.md
+scripts
+tests
+.github
+plans
+**/__pycache__
+*.pyc
+# vendor/ is deliberately not ignored: the Dockerfile mounts it read-only with
+# RUN --mount=type=bind and installs from the verified archives there, so the
+# blobs never land in an image layer. browser/Dockerfile.dockerignore excludes
+# it for the browser build, which needs none of it.

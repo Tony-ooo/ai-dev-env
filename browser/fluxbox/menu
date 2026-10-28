@@ -1,0 +1,4 @@
+[begin] (ai-dev desktop)
+  [exec] (Terminal) {xterm} <>
+  [exec] (Chromium) {browser-open} <>
+[end]

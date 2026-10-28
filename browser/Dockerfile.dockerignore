@@ -1,0 +1,7 @@
+# Context for browser/Dockerfile only (BuildKit picks this up automatically).
+# The browser image is pure apt + local files, so the ~650 MB of vendored build
+# payloads and all host-side tooling are excluded to keep context transfer small.
+*
+!LICENSE
+!browser
+!browser/**

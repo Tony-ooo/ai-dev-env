@@ -1,0 +1,68 @@
+name: Publish multi-architecture images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image release version
+        required: true
+        type: string
+      revision:
+        description: Source commit
+        required: true
+        type: string
+      base:
+        description: Version base commit
+        required: true
+        type: string
+      series:
+        description: Release major.minor
+        required: true
+        type: string
+      registry:
+        description: Development image repository
+        required: true
+        type: string
+      browser_registry:
+        description: Browser image repository
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-release
+  queue: max
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Log in to Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_TOKEN" ]; then
+            echo 'Configure DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets.' >&2
+            exit 1
+          fi
+          printf '%s' "$DOCKER_TOKEN" | docker login --username "$DOCKER_USERNAME" --password-stdin
+      - name: Publish matching indexes
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_REVISION: ${{ inputs.revision }}
+          RELEASE_BASE: ${{ inputs.base }}
+          RELEASE_SERIES: ${{ inputs.series }}
+          RELEASE_REGISTRY: ${{ inputs.registry }}
+          RELEASE_BROWSER_REGISTRY: ${{ inputs.browser_registry }}
+        run: |
+          python3 scripts/publish_image_index.py \
+            --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION" \
+            --base "$RELEASE_BASE" --series "$RELEASE_SERIES" \
+            --registry "$RELEASE_REGISTRY" --browser-registry "$RELEASE_BROWSER_REGISTRY"

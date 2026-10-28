@@ -1,0 +1,12 @@
+.DS_Store
+.history
+__pycache__/
+*.pyc
+
+# Build-time payload archives are fetched by scripts/vendor.sh, not committed:
+# they total ~640 MB, above GitHub's per-file limit, and CI caches them instead.
+vendor/blobs/
+
+# Local development artifacts: audit reports, goal trackers and acceptance logs.
+# These are working notes for a change, not part of the shipped project.
+plans/

@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""Open the managed Chromium from the desktop menu."""
+
+import os
+import sys
+import urllib.request
+
+request = urllib.request.Request(
+    "http://127.0.0.1:7070/v1/ensure", data=b"{}", method="POST",
+    headers={"Content-Type": "application/json",
+             "Authorization": "Bearer " + os.environ.get("BROWSER_CONTROL_TOKEN", "")},
+)
+try:
+    with urllib.request.urlopen(request, timeout=90) as response:
+        response.read()
+except Exception as error:
+    print(f"Cannot open the managed browser: {error}", file=sys.stderr)
+    raise SystemExit(1)

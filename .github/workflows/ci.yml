@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    name: lint + unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -S warning scripts/*.sh src/*.sh browser/start.sh src/skills/*/scripts/*.sh vendor/fetch.sh
+
+      - name: Python syntax
+        run: |
+          python3 -m compileall -q browser scripts tests
+          python3 -m py_compile browser/ai-browser browser/browser-open
+
+      # The Dockerfile installs from vendor/blobs/ by manifest checksum, so a
+      # malformed manifest or a mismatched pinned version fails here rather than
+      # during a slow image build.
+      - name: Vendor manifest
+        run: |
+          bash -n scripts/vendor.sh
+          python3 - <<'PY'
+          import pathlib, re, sys
+          lines = [l for l in pathlib.Path("vendor/manifest.txt").read_text(encoding="utf-8").splitlines()
+                   if l.strip() and not l.lstrip().startswith("#")]
+          bad = [l for l in lines if not re.fullmatch(r"[0-9a-f]{64}  \S+  https://\S+  (amd64|arm64|any)", l)]
+          if bad:
+              sys.exit("malformed manifest lines: " + repr(bad))
+          dockerfile = pathlib.Path("Dockerfile").read_text(encoding="utf-8")
+          pinned = dict(re.findall(r"^ARG (CLAUDE_CODE_VERSION|CODEX_VERSION|S6_OVERLAY_VERSION|HERDR_VERSION|UV_VERSION)=(\S+)", dockerfile, re.M))
+          entries = {(l.split("  ")[1], l.split("  ")[3]) for l in lines}
+          # Pinned versions must be covered for both architectures, since the
+          # build matrix runs each of them.
+          expected = [f"claude-code-{pinned['CLAUDE_CODE_VERSION']}.tgz",
+                      f"codex-{pinned['CODEX_VERSION']}.tgz",
+                      f"s6-overlay-noarch-v{pinned['S6_OVERLAY_VERSION']}.tar.xz"]
+          missing = [n for n in expected if (n, "any") not in entries]
+          for arch, suffix in (("amd64", "x86_64"), ("arm64", "aarch64")):
+              for name in (f"s6-overlay-{suffix}-v{pinned['S6_OVERLAY_VERSION']}.tar.xz",
+                           f"herdr-linux-{suffix}-v{pinned['HERDR_VERSION']}",
+                           f"uv-{suffix}-unknown-linux-gnu-{pinned['UV_VERSION']}.tar.gz"):
+                  if (name, arch) not in entries:
+                      missing.append(name)
+          if missing:
+              sys.exit("manifest does not cover the pinned versions: " + repr(missing))
+          print(f"manifest: {len(lines)} payloads, pinned versions covered for amd64 and arm64")
+          PY
+
+      - name: Unit tests
+        run: python3 -B -m unittest discover -s tests -v
+
+  build:
+    name: images + integration (${{ matrix.arch }})
+    needs: lint-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The slow payloads are fetched once and cached; the Dockerfile then
+      # installs from the verified local copies instead of the network. Only the
+      # matrix architecture is fetched, so each job pulls half the payloads.
+      - name: Cache vendor payloads
+        uses: actions/cache@v4
+        with:
+          path: vendor/blobs
+          key: vendor-${{ matrix.arch }}-${{ hashFiles('vendor/manifest.txt') }}
+
+      - name: Fetch vendor payloads
+        run: bash scripts/vendor.sh
+
+      - name: Build images
+        run: |
+          docker build --build-arg TARGETARCH=${{ matrix.arch }} -t ai-dev-env:ci .
+          docker build -f browser/Dockerfile -t ai-dev-browser:ci .
+
+      - name: Smoke test public entry points
+        run: |
+          docker run --rm --network none --entrypoint ai-browser ai-dev-env:ci --help
+          docker run --rm --network none --entrypoint python3 ai-dev-browser:ci -c 'import ai_dev_auth; print(ai_dev_auth.FileAuth.__name__)'
+
+      - name: Regression tests in the image toolchain
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 128 --memory 512m --cpus 2 \
+            --tmpfs /tmp:rw,exec,nosuid,size=128m,mode=1777 \
+            --mount "type=bind,src=$PWD,dst=/repo,readonly" --workdir /repo \
+            --entrypoint /usr/bin/env ai-dev-env:ci -i \
+            PATH=/command:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            HOME=/tmp TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 \
+            timeout 180 python3 -B -m unittest discover -s tests -v
+
+      - name: Account mapping with a disposable account database
+        run: |
+          docker run --rm --user 0 --network none --read-only --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+            --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 \
+            --tmpfs /scratch:rw,nosuid,nodev,size=64m \
+            --tmpfs /etc:rw,nosuid,nodev,size=16m \
+            --tmpfs /home/dev:rw,nosuid,nodev,size=16m \
+            --tmpfs /var/log:rw,nosuid,nodev,size=8m \
+            --mount "type=bind,src=$PWD,dst=/work,readonly" --workdir /work \
+            --entrypoint /usr/bin/env ai-dev-env:ci -i \
+            PATH=/command:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            HOME=/scratch TMPDIR=/scratch PYTHONDONTWRITEBYTECODE=1 AI_DEV_ACCOUNT_FIXTURE=1 \
+            timeout 60 bash -c 'touch /scratch/account-fixture-enabled; python3 -B -m unittest tests.test_persistence.AccountRemapTest -v'
+
+      - name: Real lifecycle integration
+        run: |
+          python3 tests/integration.py --dev-image ai-dev-env:ci --browser-image ai-dev-browser:ci \
+            --output "$RUNNER_TEMP/ai-dev-acceptance"
+
+      - name: Save acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/ai-dev-acceptance/integration.json
+            ${{ runner.temp }}/ai-dev-acceptance/browser-screen.png
