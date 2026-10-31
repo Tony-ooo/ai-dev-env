@@ -99,7 +99,7 @@ class CdpClient:
         # Navigations to another document started or committed in each frame, per CDP session.
         self._navigations: dict[tuple[Any, str], int] = {}
 
-    def connect(self) -> None:
+    def connect(self, timeout_s: float = 10.0) -> None:
         assert self._ws_url.startswith("ws://"), self._ws_url
         rest = self._ws_url[len("ws://") :]
         host_port, _, path = rest.partition("/")
@@ -109,7 +109,9 @@ class CdpClient:
         else:
             host, port = host_port, 80
         path = "/" + path
-        sock = socket.create_connection((host, port), timeout=10)
+        deadline = time.monotonic() + timeout_s
+        sock = socket.create_connection((host, port), timeout=timeout_s)
+        self._sock = sock  # Allow close() to clean up a failed handshake.
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         req = (
             f"GET {path} HTTP/1.1\r\n"
@@ -123,6 +125,10 @@ class CdpClient:
         sock.sendall(req.encode("ascii"))
         data = b""
         while b"\r\n\r\n" not in data:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("CDP websocket handshake timed out")
+            sock.settimeout(remaining)
             chunk = sock.recv(4096)
             if not chunk:
                 raise RuntimeError("CDP websocket handshake closed")

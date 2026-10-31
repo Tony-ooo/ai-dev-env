@@ -18,6 +18,8 @@ Environment is injected by scripts/deploy.sh, or read from
 from __future__ import annotations
 
 import json
+import importlib.util
+from importlib.machinery import SourceFileLoader
 import os
 import shlex
 import subprocess
@@ -214,6 +216,27 @@ def pages() -> list[dict]:
     return [page for page in listing if page.get("type") == "page"]
 
 
+def navigate_tab(tab_id: str, url: str) -> None:
+    # Reuse the existing CDP implementation and address the exact blank target.
+    loader = SourceFileLoader("ai_dev_page_client", PAGE_BROWSER)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    os.environ["BROWSER_CDP_HOST"] = host()
+    os.environ["BROWSER_CDP_PORT"] = str(cdp_port())
+    client = module.CdpClient(module.discover_ws_url(cdp_port()))
+    try:
+        client.connect()
+        session = client.call("Target.attachToTarget", {"targetId": tab_id, "flatten": True})["sessionId"]
+        result = client.call("Page.navigate", {"url": url}, session_id=session, timeout_s=15)
+        if result.get("errorText"):
+            raise Failure("Navigation failed: " + result["errorText"])
+        # A reused new-tab page can leave native keyboard focus in the omnibox.
+        client.call("Page.bringToFront", session_id=session)
+    finally:
+        client.close()
+
+
 def cmd_open(url: str) -> int:
     if not url:
         raise Failure("usage: ai-browser open <url>")
@@ -221,10 +244,16 @@ def cmd_open(url: str) -> int:
     target = url.rstrip("/")
     # Reuse an existing tab instead of piling up one tab per open call; a large
     # restored session is what makes the first command after idle slow.
-    for page in pages():
+    current = pages()
+    for page in current:
         if str(page.get("url", "")).rstrip("/") == target:
             cdp_json(f"/json/activate/{page['id']}")
             return emit({"ok": True, "url": url, "reused": True, "id": page["id"]})
+    if len(current) == 1 and current[0].get("url") in ("about:blank", "chrome://newtab/"):
+        page = current[0]
+        navigate_tab(page["id"], url)
+        cdp_json(f"/json/activate/{page['id']}")
+        return emit({"ok": True, "url": url, "reused": True, "id": page["id"]})
     created = cdp_json(f"/json/new?{urllib.parse.quote(url, safe='')}", "PUT")
     return emit({"ok": True, "url": url, "reused": False, "target": created})
 

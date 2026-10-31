@@ -20,3 +20,5 @@ Modifications for ai-dev-env (Apache License 2.0, §4(b)):
   - Default home path changed from /home/rakazo to /home/dev.
   - Uploads are restricted to shared workspace/downloads roots and mapped from
     the dev container's canonical paths to the browser container's mount paths.
+  - WebSocket handshake deadlines are configurable for bounded browser shutdown;
+    failed handshakes retain the socket reference so callers can close it.

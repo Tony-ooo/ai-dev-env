@@ -301,7 +301,7 @@ print(json.dumps(module.request('POST','/v1/actions',{'actions':[
 
     def auth(self):
         # Read only this disposable user's generated token; never print its value.
-        code = f"""import base64,pathlib,socket,os,urllib.parse
+        code = f"""import base64,pathlib,socket,os,urllib.parse,urllib.request,json,time
 address=({self.browser!r},6080)
 auth=pathlib.Path('/home/dev/.ai-data/browser/state/screen-auth').read_text().strip()
 for path,supplied,upgrade in (('/vnc.html','',False),('/vnc.html',auth,False),('/websockify','',True),('/websockify',auth,True)):
@@ -339,10 +339,21 @@ for path,upgrade in (('/vnc.html',False),('/websockify',True)):
    if not chunk: raise RuntimeError('Incomplete session response')
    data+=chunk
   print(data.split(b'\\r\\n',1)[0].decode())
+with socket.create_connection(address,timeout=30) as sock:
+ sock.settimeout(30)
+ head=b'GET /websockify HTTP/1.1\\r\\nHost: localhost\\r\\nCookie: '+cookie+b'\\r\\n'
+ head+=b'Upgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Key: '+base64.b64encode(os.urandom(16))+b'\\r\\nSec-WebSocket-Version: 13\\r\\n\\r\\n'
+ sock.sendall(head); data=b''
+ while b'\\r\\n' not in data: data+=sock.recv(4096)
+ assert b'101' in data.split(b'\\r\\n',1)[0]
+ time.sleep(12)  # Longer than this disposable browser's six-second idle timeout.
+ with urllib.request.urlopen('http://'+address[0]+':7070/__hub/status') as response:
+  status=json.load(response)
+ assert status['stack'] and status['active_connections']>=1,status
 """
         lines = self.py(code).splitlines()
         assert len(lines) == 7 and all(code in line for code, line in zip(("401", "200", "401", "101", "303", "200", "101"), lines)), lines
-        return "Basic and form login protect the page and allow authenticated WebSocket connections"
+        return "Screen authentication works; a connected noVNC WebSocket prevents idle expiry"
 
     def crash_recovery(self):
         pid = self.docker("exec", self.browser, "pgrep", "-f", "^/usr/bin/python3 /usr/local/bin/browser-control$").stdout.strip()
@@ -365,6 +376,27 @@ for path,upgrade in (('/vnc.html',False),('/websockify',True)):
         assert self.eval("localStorage.getItem('audit-profile')") == self.run_id
 
     def idle_restore(self):
+        cookie_code = """import importlib.util,importlib.machinery,os,time
+os.environ['BROWSER_CDP_HOST']=os.environ['BROWSER_HOST']
+loader=importlib.machinery.SourceFileLoader('page_browser','/usr/local/bin/page-browser')
+spec=importlib.util.spec_from_loader(loader.name,loader)
+module=importlib.util.module_from_spec(spec);loader.exec_module(module)
+client=module.CdpClient(module.discover_ws_url(module.cdp_port()));client.connect()
+try:
+ session=module.attach_page(client)
+ if SET_COOKIE:
+  assert client.call('Network.setCookie',{'name':'idle-fixture','value':'retained','url':'https://idle-fixture.invalid/','expires':time.time()+3600},session_id=session)['success']
+ cookies=client.call('Network.getCookies',{'urls':['https://idle-fixture.invalid/']},session_id=session)['cookies']
+ assert any(c['name']=='idle-fixture' and c['value']=='retained' for c in cookies)
+ print('Persistent fixture cookie retained')
+finally: client.close()
+"""
+        self.py(cookie_code.replace("SET_COOKIE", "True"))
+        self.cli("open", "file:///home/dev/workspace/audit.html?extra-tab")
+        assert self.cli("tabs")["count"] >= 2
+        def memory():
+            return self.docker("stats", "--no-stream", "--format", "{{.MemUsage}}", self.browser).stdout.strip()
+        awake_memory = memory()
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if self.cli("status")["state"] == "idle":
@@ -372,11 +404,39 @@ for path,upgrade in (('/vnc.html',False),('/websockify',True)):
             time.sleep(1)
         else:
             raise RuntimeError("Desktop did not enter idle")
-        self.cli("tabs")
-        self.cli("close", "all")
+        idle_memory = memory()
+        assert self.py("from pathlib import Path;print(Path('/home/dev/.ai-data/state/tabs-expired').exists())",
+                       container=self.browser) == "True"
+        # The pending expiry must survive a hub/container restart as well.
+        self.docker("restart", self.browser)
+        tabs = self.cli("tabs")
+        assert tabs["count"] == 1 and tabs["tabs"][0]["url"] == "about:blank", tabs
         self.cli("open", "file:///home/dev/workspace/audit.html")
+        assert self.cli("tabs")["count"] == 1
         assert self.cli("snapshot")["title"] == "Browser acceptance"
         self.assert_profile()
+        self.py(cookie_code.replace("SET_COOKIE", "False"))
+        assert self.py("from pathlib import Path;print(Path('/home/dev/downloads/download.txt').read_text())") == "downloads upload verified"
+        deadline = time.monotonic() + 45
+        while self.cli("status")["state"] != "idle":
+            if time.monotonic() > deadline:
+                raise RuntimeError("Desktop did not re-enter idle")
+            time.sleep(1)
+        self.cli("open", "file:///home/dev/workspace/audit.html")
+        assert self.cli("tabs")["count"] == 1
+        self.assert_profile()
+        # Simulate interruption after expiry was persisted but before cleanup.
+        self.cli("open", "file:///home/dev/workspace/audit.html?interrupted")
+        self.py("from ai_dev_session import mark_expired;mark_expired('/home/dev/.ai-data/state')",
+                container=self.browser)
+        self.docker("kill", "--signal", "KILL", self.browser)
+        self.docker("start", self.browser)
+        tabs = self.cli("tabs")
+        assert tabs["count"] == 1 and tabs["tabs"][0]["url"] == "about:blank", tabs
+        self.assert_profile()
+        self.py(cookie_code.replace("SET_COOKIE", "False"))
+        return {"awake_memory": awake_memory, "idle_memory": idle_memory,
+                "verified": "expiry survives restart/interrupted shutdown, one blank/target tab, cookies/localStorage/downloads retained"}
 
     def browser_recreate(self):
         self.script("browser.sh", "restart", "--user", self.user, "--base", self.base,
@@ -466,7 +526,7 @@ for path,upgrade in (('/vnc.html',False),('/websockify',True)):
                 ("4096-character desktop typing", self.long_input),
                 ("screen authentication", self.auth),
                 ("control process crash recovery", self.crash_recovery),
-                ("idle and wake restores browser", self.idle_restore),
+                ("idle expires tabs and preserves persistent browser data", self.idle_restore),
                 ("browser recreation and menu launcher retain profile", self.browser_recreate),
                 ("dev recreate preserves configuration network and identity", self.recreate),
                 ("real desktop screenshot", self.screenshot),

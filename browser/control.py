@@ -26,10 +26,12 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from ai_dev_logs import spawn_logged
+from ai_dev_session import clear_tab_session, expiry_marker
 
 TOKEN = os.environ.get("BROWSER_CONTROL_TOKEN", "")
 DISPLAY = os.environ.get("DISPLAY", ":1")
 PROFILE = os.environ.get("BROWSER_PROFILE", "/home/dev/.ai-data/profile")
+STATE_DIR = os.path.join(os.environ.get("HOME", "/home/dev"), ".ai-data", "state")
 CDP_PORT = int(os.environ.get("BROWSER_CDP_PORT", "9222"))
 LOG_DIR = "/tmp/browser"
 MAX_BODY_BYTES = 64 * 1024
@@ -122,23 +124,52 @@ def clear_stale_profile_lock() -> bool:
 
 def ensure_chromium(timeout_s: float = 20.0) -> dict:
     with LAUNCH_LOCK:
+        marker = expiry_marker(STATE_DIR)
+        fresh = marker.exists()
         if cdp_alive():
+            if fresh:
+                finish_fresh_start(marker)
             return {"started": False, "cdp": True}
         binary = chrome_bin()
         if not binary:
             raise RuntimeError("no Chromium/Chrome binary in this image")
         started = clear_stale_profile_lock()
         if started:
+            flags = list(CHROME_FLAGS)
+            if fresh:
+                clear_tab_session(PROFILE)
+                flags.remove("--restore-last-session")
+                # Suppress both saved sessions and configured startup pages.
+                # Create one blank tab explicitly once CDP becomes ready.
+                flags.append("--no-startup-window")
             env = {**os.environ, "DISPLAY": DISPLAY}
             env.setdefault("HOME", "/home/dev")
             os.makedirs(LOG_DIR, exist_ok=True)
-            spawn_logged([binary, *CHROME_FLAGS], os.path.join(LOG_DIR, "chromium.log"), env)
+            spawn_logged([binary, *flags], os.path.join(LOG_DIR, "chromium.log"), env)
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             if cdp_alive():
+                if fresh:
+                    finish_fresh_start(marker)
                 return {"started": started, "cdp": True}
             time.sleep(0.25)
         raise RuntimeError(f"Chromium did not expose CDP on 127.0.0.1:{CDP_PORT}")
+
+
+def finish_fresh_start(marker) -> None:
+    """Complete (or retry) initialization before admitting browser operations."""
+    base = f"http://127.0.0.1:{CDP_PORT}"
+    with urllib.request.urlopen(base + "/json/list", timeout=3) as response:
+        pages = [page for page in json.load(response) if page.get("type") == "page"]
+    if not pages:
+        request = urllib.request.Request(base + "/json/new?about%3Ablank", method="PUT")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            json.load(response)
+    with urllib.request.urlopen(base + "/json/list", timeout=3) as response:
+        pages = [page for page in json.load(response) if page.get("type") == "page"]
+    if len(pages) != 1 or pages[0].get("url") != "about:blank":
+        raise RuntimeError("Fresh browser did not initialize with exactly one blank tab")
+    marker.unlink()
 
 
 def xdotool(*args: str, timeout: float = 15) -> None:

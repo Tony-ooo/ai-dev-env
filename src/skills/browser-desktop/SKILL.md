@@ -17,6 +17,12 @@ ai-browser status
 ```
 
 - `state: idle` means the desktop stack is asleep (normal); the next operation wakes it.
+  After 600 seconds without active connections (configurable by the administrator),
+  old tabs expire. Waking starts with one blank tab; `open` reuses it for the URL.
+  Connected noVNC viewers and in-flight requests prevent expiry. Persistent site
+  data and downloaded files remain, but unsaved page state and unprotected background
+  downloads do not. After idle, open the required URL and take a new snapshot;
+  do not reuse old tab IDs or element references.
 - `state: starting` / `stopping` means it is waking or shutting down. Query `status`
   again later; a status query never wakes the desktop or extends the idle timer.
 - `state: awake` with `control` / `cdp` means it is ready.

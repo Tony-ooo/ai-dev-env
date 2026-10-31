@@ -54,7 +54,7 @@ RUN set -eux; \
 
 # COPY --chmod creates missing intermediate directories with that mode (no
 # execute bit), so create them first.
-RUN mkdir -p /usr/local/lib/ai-dev-python /usr/share/doc/ai-dev-browser \
+RUN mkdir -p /usr/local/lib/ai-dev-python/third_party /usr/share/doc/ai-dev-browser \
     && chmod 755 /usr/local/lib/ai-dev-python /usr/share/doc/ai-dev-browser
 
 COPY --chmod=755 browser/start.sh        /usr/local/bin/browser-computer
@@ -62,6 +62,8 @@ COPY --chmod=755 browser/hub.py          /usr/local/bin/browser-hub
 COPY --chmod=755 browser/control.py      /usr/local/bin/browser-control
 COPY --chmod=644 browser/auth_file_plugin.py /usr/local/lib/ai-dev-python/ai_dev_auth.py
 COPY --chmod=644 browser/ai_dev_logs.py  /usr/local/lib/ai-dev-python/ai_dev_logs.py
+COPY --chmod=644 browser/ai_dev_session.py /usr/local/lib/ai-dev-python/ai_dev_session.py
+COPY --chmod=644 browser/third_party/page_browser.py /usr/local/lib/ai-dev-python/third_party/page_browser.py
 COPY --chmod=755 browser/browser-open   /usr/local/bin/browser-open
 COPY --chmod=644 browser/fluxbox/init    /etc/ai-dev/fluxbox/init
 COPY --chmod=644 browser/fluxbox/apps    /etc/ai-dev/fluxbox/apps

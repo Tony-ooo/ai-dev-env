@@ -28,8 +28,11 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 
 from ai_dev_logs import spawn_logged
+from ai_dev_session import clear_tab_session, mark_expired
+from third_party.page_browser import CdpClient
 
 DISPLAY = os.environ.get("DISPLAY", ":1")
 HOME = os.environ.get("HOME", "/home/dev")
@@ -57,7 +60,7 @@ PROCS: dict[str, subprocess.Popen] = {}
 READY = False
 TRANSITION = ""
 ACTIVE = 0
-LAST_ACTIVE = time.time()
+LAST_ACTIVE = time.monotonic()
 STOPPING = threading.Event()
 LAST_ERROR = ""
 NEXT_START = 0.0
@@ -275,6 +278,22 @@ def chromium_alive() -> bool:
 
 def stop_chromium() -> None:
     # Keep control's stdout consumer and the display alive until Chromium exits.
+    if port_open(CHROMIUM_PORT):
+        client = None
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{CHROMIUM_PORT}/json/version", timeout=1) as response:
+                endpoint = json.load(response)["webSocketDebuggerUrl"]
+            client = CdpClient(endpoint)
+            client.connect(timeout_s=1)
+            client.call("Browser.close", timeout_s=1)
+            deadline = time.monotonic() + 2
+            while chromium_alive() and time.monotonic() < deadline:
+                time.sleep(0.1)
+        except Exception:  # noqa: BLE001 - shutdown must retain the bounded signal fallback
+            log("graceful browser close unavailable; using signal fallback")
+        finally:
+            if client is not None:
+                client.close()
     uid = str(os.getuid())
     subprocess.run(["pkill", "-TERM", "-u", uid, "-f", "chromium"], capture_output=True, timeout=3)
     deadline = time.monotonic() + 8
@@ -293,12 +312,15 @@ def stop_chromium() -> None:
     subprocess.run(["pkill", "-KILL", "-u", uid, "-f", "chrome_crashpad"], capture_output=True, timeout=3)
 
 
-def stop_stack() -> None:
+def stop_stack(*, expire_tabs: bool = False) -> None:
     """Stop every desktop component, keep the hub listening. Caller holds LOCK."""
     global READY, TRANSITION
     if not READY and not PROCS:
         TRANSITION = ""
         return
+    if expire_tabs:
+        # Write before shutdown; an interrupted stop must not restore old tabs.
+        mark_expired(STATE_DIR)
     TRANSITION = "stopping"
     READY = False
     log("stopping desktop stack")
@@ -335,6 +357,8 @@ def stop_stack() -> None:
             os.unlink("/tmp/.X1-lock")
         except OSError:
             pass
+        if expire_tabs:
+            clear_tab_session(PROFILE_DIR)
         log("desktop stack stopped")
     finally:
         TRANSITION = ""
@@ -379,8 +403,8 @@ def reaper() -> None:
                     log("desktop component failed; resetting stack")
                     stop_stack()
                     LAST_ERROR = "desktop component exited; the next operation restarts it"
-                elif READY and ACTIVE == 0 and time.time() - LAST_ACTIVE > IDLE_SECONDS:
-                    stop_stack()
+                elif READY and ACTIVE == 0 and time.monotonic() - LAST_ACTIVE >= IDLE_SECONDS:
+                    stop_stack(expire_tabs=True)
             except Exception as error:  # noqa: BLE001
                 LAST_ERROR = f"desktop shutdown failed: {error}"
                 NEXT_START = time.monotonic() + 5
@@ -581,7 +605,7 @@ def hub_status() -> bytes:
             "state": state,
             "error": LAST_ERROR if not healthy else "",
             "active_connections": ACTIVE,
-            "idle_seconds": int(time.time() - LAST_ACTIVE),
+            "idle_seconds": int(time.monotonic() - LAST_ACTIVE),
             "idle_timeout": IDLE_SECONDS,
             "display": DISPLAY,
         }).encode()
@@ -678,7 +702,7 @@ def handle(client: socket.socket, backend: int, rewrite: bool, offer_status: boo
             pass
         with LOCK:
             ACTIVE -= 1
-            LAST_ACTIVE = time.time()
+            LAST_ACTIVE = time.monotonic()
 
 
 def serve(port: int, backend: int, rewrite: bool, offer_status: bool = False) -> None:

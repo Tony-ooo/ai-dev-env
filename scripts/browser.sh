@@ -247,7 +247,7 @@ Browser computer is ready
 
   Container: ${BROWSER}
   Network:   ${NET}
-  Idle:      ${IDLE_SECONDS}s without a connection stops the desktop stack, leaving only the waker
+  Idle:      ${IDLE_SECONDS}s without active connections expires old tabs and stops the desktop stack
 
   Screen (run on the host; no ports are published):
     ssh -T -o ExitOnForwardFailure=yes -p ${SSH_PORT} -L 127.0.0.1:6080:${BROWSER}:6080 dev@<host> "echo SSH connected. Open the live view to check the tunnel.; exec sleep infinity"
